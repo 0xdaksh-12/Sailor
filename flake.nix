@@ -20,7 +20,7 @@
         valgrind
 
         # C/C++ Development & Formatting Tools
-        clang-tools # Provides clangd (LSP) and clang-format
+        clang-tools
         openssl
 
         # Text Editor and Shell formatters
@@ -31,8 +31,7 @@
 
       # Optional: Ensure Neovim knows exactly where to find environment tools
       shellHook = ''
-        echo "⚓ Sailor Dev Environment Loaded!"
-        echo "Available tools: clangd, clang-format, shfmt, alejandra"
+        echo "Welcome to Sailor"
       '';
     };
   };
