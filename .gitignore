@@ -2,3 +2,4 @@ build/
 a.out
 .direnv/
 .DS_Store
+received_file
