@@ -1,0 +1,5 @@
+{
+  "clang-format.style": "Google",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "xaver.clang-format"
+}
