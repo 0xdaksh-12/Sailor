@@ -1,41 +1,32 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 project(Sailor)
 
-set (CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(project_warnings INTERFACE)
-
-target_compile_options(project_warnings INTERFACE
-    -Wall
-    -Wextra
-    -Wpedantic
-    -Wconversion
-    -Wsign-conversion
-    -Wshadow
-    -g
+add_executable(
+    sailor-server
+    server/main.cpp
+    server/tcp_server.cpp
 )
 
-set(CMAKE_BUILD_TYPE Debug)
-
-add_executable(server server/server.cpp)
-add_executable(client client/client.cpp)
-
-target_compile_options(server INTERFACE
-    -Wall
-    -Wextra
-    -Wpedantic
-    -Wconversion
-    -Wsign-conversion
-    -Wshadow
+add_executable(
+    sailor-client
+    client/main.cpp
+    client/tcp_client.cpp
 )
 
-target_compile_options(client INTERFACE
-    -Wall
-    -Wextra
-    -Wpedantic
-    -Wconversion
-    -Wsign-conversion
-    -Wshadow
+target_include_directories(
+    sailor-server
+    PRIVATE
+    server
+    common
+)
+
+target_include_directories(
+    sailor-client
+    PRIVATE
+    client
+    common
 )
