@@ -3,13 +3,11 @@
 #include <string>
 
 class TcpClient {
-public:
-    bool connectTo(
-        const std::string& host,
-        int port);
+ public:
+  bool connectTo(const std::string& host, int port);
 
-    bool ping();
+  bool ping();
 
-private:
-    int socket_fd_;
+ private:
+  int socket_fd_{-1};
 };
