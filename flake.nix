@@ -18,18 +18,20 @@
         cmake
         gdb
         valgrind
+        pkg-config
+
+        # TLS and Cryptography
+        openssl
 
         # C/C++ Development & Formatting Tools
         clang-tools
-        openssl
 
         # Text Editor and Shell formatters
         neovim
-        shfmt # Added for shell scripts
-        alejandra # Added for Nix formatting
+        shfmt
+        alejandra
       ];
 
-      # Optional: Ensure Neovim knows exactly where to find environment tools
       shellHook = ''
         echo "Welcome to Sailor"
       '';
