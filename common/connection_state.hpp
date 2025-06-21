@@ -1,0 +1,9 @@
+#pragma once
+
+enum class ConnectionState {
+  DISCONNECTED,
+  CONNECTING,
+  TLS_HANDSHAKE,
+  CONNECTED_UNAUTHENTICATED,
+  AUTHENTICATED
+};

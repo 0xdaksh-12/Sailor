@@ -1,13 +1,19 @@
 #pragma once
 
+#include <string>
+
+#include "tls/tls_server.hpp"
+
 class TcpServer {
-public:
-  explicit TcpServer(int port);
+ public:
+  TcpServer(int port, std::string cert_path, std::string key_path);
+  ~TcpServer();
 
   bool start();
   void run();
 
-private:
+ private:
   int port_;
-  int server_fd_;
+  int server_fd_{-1};
+  TlsServerContext tls_context_;
 };

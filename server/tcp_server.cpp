@@ -1,20 +1,35 @@
 #include "tcp_server.hpp"
 
 #include <arpa/inet.h>
+#include <openssl/err.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <cstring>
 #include <iostream>
 
+#include "common/connection_state.hpp"
 #include "common/packet_builder.hpp"
 #include "protocol/packet.hpp"
 #include "protocol/packet_io.hpp"
 #include "protocol/packet_type.hpp"
+#include "transport/tls_transport.hpp"
 
-TcpServer::TcpServer(int port) : port_(port), server_fd_(-1) {}
+TcpServer::TcpServer(int port, std::string cert_path, std::string key_path)
+    : port_(port), tls_context_(std::move(cert_path), std::move(key_path)) {}
+
+TcpServer::~TcpServer() {
+  if (server_fd_ >= 0) {
+    close(server_fd_);
+  }
+}
 
 bool TcpServer::start() {
+  if (!tls_context_.initialize()) {
+    std::cerr << "Failed to initialize TLS server context" << std::endl;
+    return false;
+  }
+
   server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd_ < 0) {
     perror("socket");
@@ -39,7 +54,8 @@ bool TcpServer::start() {
     return false;
   }
 
-  std::cout << "Server listening on port " << port_ << std::endl;
+  std::cout << "Server listening on port " << port_ << " (TLS enabled)"
+            << std::endl;
   return true;
 }
 
@@ -55,26 +71,51 @@ void TcpServer::run() {
       continue;
     }
 
+    ConnectionState state = ConnectionState::TLS_HANDSHAKE;
+
+    SSL* ssl = SSL_new(tls_context_.get());
+    if (!ssl) {
+      ERR_print_errors_fp(stderr);
+      close(client_fd);
+      continue;
+    }
+
+    SSL_set_fd(ssl, client_fd);
+
+    if (SSL_accept(ssl) <= 0) {
+      std::cerr << "TLS handshake failed" << std::endl;
+      ERR_print_errors_fp(stderr);
+      SSL_free(ssl);
+      close(client_fd);
+      continue;
+    }
+
+    state = ConnectionState::CONNECTED_UNAUTHENTICATED;
+    std::cout << "TLS handshake success (Cipher: " << SSL_get_cipher(ssl)
+              << ")" << std::endl;
+
+    // TlsTransport manages the lifecycle of ssl
+    TlsTransport transport(client_fd, ssl, /*take_ownership=*/true);
+
     Packet packet;
-    if (PacketIO::receivePacket(client_fd, packet)) {
+    if (PacketIO::receivePacket(transport, packet)) {
       auto p_type = static_cast<PacketType>(packet.header.type);
-      std::cout << "Received packet type: " << static_cast<uint32_t>(p_type)
-                << std::endl;
 
       switch (p_type) {
         case PacketType::PING: {
-          std::cout << "Received packet type: PING" << std::endl;
+          std::cout << "Received PING" << std::endl;
           Packet pong = PacketBuilder::pong();
-          PacketIO::sendPacket(client_fd, pong);
+          PacketIO::sendPacket(transport, pong);
           break;
         }
         default:
-          std::cout << "Unknown or unhandled packet type: "
-                    << packet.header.type << std::endl;
+          std::cout << "Received packet type: "
+                    << static_cast<uint32_t>(p_type) << std::endl;
           break;
       }
     }
 
+    state = ConnectionState::DISCONNECTED;
     close(client_fd);
   }
 }
