@@ -15,14 +15,20 @@
 #include "protocol/packet_type.hpp"
 #include "transport/tls_transport.hpp"
 
-TcpServer::TcpServer(int port, std::string cert_path, std::string key_path)
-    : port_(port), tls_context_(std::move(cert_path), std::move(key_path)) {}
+TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
+                     std::string user_db_path)
+    : port_(port),
+      tls_context_(std::move(cert_path), std::move(key_path)),
+      auth_manager_(std::move(user_db_path)),
+      rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
   if (server_fd_ >= 0) {
     close(server_fd_);
   }
 }
+
+uint64_t TcpServer::generateSessionId() { return rng_(); }
 
 bool TcpServer::start() {
   if (!tls_context_.initialize()) {
@@ -54,9 +60,112 @@ bool TcpServer::start() {
     return false;
   }
 
-  std::cout << "Server listening on port " << port_ << " (TLS enabled)"
-            << std::endl;
+  std::cout << "Server listening on port " << port_
+            << " (TLS & Auth enabled)" << std::endl;
   return true;
+}
+
+void TcpServer::handleClient(int client_fd) {
+  SSL* ssl = SSL_new(tls_context_.get());
+  if (!ssl) {
+    ERR_print_errors_fp(stderr);
+    close(client_fd);
+    return;
+  }
+
+  SSL_set_fd(ssl, client_fd);
+
+  if (SSL_accept(ssl) <= 0) {
+    std::cerr << "TLS handshake failed" << std::endl;
+    ERR_print_errors_fp(stderr);
+    SSL_free(ssl);
+    close(client_fd);
+    return;
+  }
+
+  std::cout << "TLS connected (Cipher: " << SSL_get_cipher(ssl) << ")"
+            << std::endl;
+
+  TlsTransport transport(client_fd, ssl, /*take_ownership=*/true);
+  sailor::server::Session session{};
+  ConnectionState state = ConnectionState::CONNECTED_UNAUTHENTICATED;
+
+  Packet packet;
+  while (PacketIO::receivePacket(transport, packet)) {
+    auto p_type = static_cast<PacketType>(packet.header.type);
+
+    switch (p_type) {
+      case PacketType::PING: {
+        std::cout << "Received PING" << std::endl;
+        Packet pong = PacketBuilder::pong();
+        PacketIO::sendPacket(transport, pong);
+        break;
+      }
+
+      case PacketType::AUTH_REQUEST: {
+        std::string username, password;
+        if (!PacketBuilder::parseAuthRequest(packet, username, password)) {
+          Packet err =
+              PacketBuilder::error("Malformed AUTH_REQUEST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::cout << "Authenticating user: " << username << std::endl;
+        bool ok = auth_manager_.authenticate(username, password);
+
+        if (ok) {
+          session.id = generateSessionId();
+          session.username = username;
+          session.authenticated = true;
+          state = ConnectionState::AUTHENTICATED;
+
+          std::cout << "User '" << username
+                    << "' authenticated successfully (Session: " << session.id
+                    << ")" << std::endl;
+
+          Packet resp = PacketBuilder::authResponse(
+              true, session.id, "Authentication successful");
+          PacketIO::sendPacket(transport, resp);
+        } else {
+          std::cout << "Authentication failed for user: " << username
+                    << std::endl;
+          Packet resp =
+              PacketBuilder::authResponse(false, 0, "Invalid credentials");
+          PacketIO::sendPacket(transport, resp);
+        }
+        break;
+      }
+
+      // Authorization Guard for protected operations (Phase 5+)
+      case PacketType::LIST:
+      case PacketType::UPLOAD_BEGIN:
+      case PacketType::DOWNLOAD_REQUEST:
+      case PacketType::DELETE_FILE:
+      case PacketType::RENAME_FILE:
+      case PacketType::MKDIR: {
+        if (!session.authenticated) {
+          std::cerr << "Unauthorized request for packet type: "
+                    << static_cast<uint32_t>(p_type) << std::endl;
+          Packet err = PacketBuilder::error("Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+        // Allowed operations will dispatch here in Phase 5+
+        break;
+      }
+
+      default:
+        std::cout << "Unhandled packet type: "
+                  << static_cast<uint32_t>(p_type) << std::endl;
+        break;
+    }
+  }
+
+  std::cout << "Client disconnected"
+            << (session.authenticated ? (" (" + session.username + ")") : "")
+            << std::endl;
+  close(client_fd);
 }
 
 void TcpServer::run() {
@@ -71,51 +180,6 @@ void TcpServer::run() {
       continue;
     }
 
-    ConnectionState state = ConnectionState::TLS_HANDSHAKE;
-
-    SSL* ssl = SSL_new(tls_context_.get());
-    if (!ssl) {
-      ERR_print_errors_fp(stderr);
-      close(client_fd);
-      continue;
-    }
-
-    SSL_set_fd(ssl, client_fd);
-
-    if (SSL_accept(ssl) <= 0) {
-      std::cerr << "TLS handshake failed" << std::endl;
-      ERR_print_errors_fp(stderr);
-      SSL_free(ssl);
-      close(client_fd);
-      continue;
-    }
-
-    state = ConnectionState::CONNECTED_UNAUTHENTICATED;
-    std::cout << "TLS handshake success (Cipher: " << SSL_get_cipher(ssl)
-              << ")" << std::endl;
-
-    // TlsTransport manages the lifecycle of ssl
-    TlsTransport transport(client_fd, ssl, /*take_ownership=*/true);
-
-    Packet packet;
-    if (PacketIO::receivePacket(transport, packet)) {
-      auto p_type = static_cast<PacketType>(packet.header.type);
-
-      switch (p_type) {
-        case PacketType::PING: {
-          std::cout << "Received PING" << std::endl;
-          Packet pong = PacketBuilder::pong();
-          PacketIO::sendPacket(transport, pong);
-          break;
-        }
-        default:
-          std::cout << "Received packet type: "
-                    << static_cast<uint32_t>(p_type) << std::endl;
-          break;
-      }
-    }
-
-    state = ConnectionState::DISCONNECTED;
-    close(client_fd);
+    handleClient(client_fd);
   }
 }

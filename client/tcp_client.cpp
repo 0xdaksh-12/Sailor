@@ -23,6 +23,7 @@ void TcpClient::disconnect() {
     socket_fd_ = -1;
   }
   state_ = ConnectionState::DISCONNECTED;
+  session_id_ = 0;
 }
 
 bool TcpClient::connectTo(const std::string& host, int port) {
@@ -85,6 +86,62 @@ bool TcpClient::connectTo(const std::string& host, int port) {
   return true;
 }
 
+bool TcpClient::login(const std::string& username,
+                      const std::string& password) {
+  if (!transport_ || state_ == ConnectionState::DISCONNECTED) {
+    std::cerr << "Cannot login: not connected" << std::endl;
+    return false;
+  }
+
+  state_ = ConnectionState::AUTHENTICATING;
+
+  Packet req = PacketBuilder::authRequest(username, password);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    std::cerr << "Failed to send AUTH_REQUEST" << std::endl;
+    disconnect();
+    return false;
+  }
+
+  Packet resp;
+  if (!PacketIO::receivePacket(*transport_, resp)) {
+    std::cerr << "Failed to receive AUTH_RESPONSE" << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(resp.header.type) ==
+      PacketType::AUTH_RESPONSE) {
+    bool ok = false;
+    uint64_t sid = 0;
+    std::string msg;
+
+    if (!PacketBuilder::parseAuthResponse(resp, ok, sid, msg)) {
+      std::cerr << "Malformed AUTH_RESPONSE" << std::endl;
+      return false;
+    }
+
+    if (ok) {
+      session_id_ = sid;
+      state_ = ConnectionState::AUTHENTICATED;
+      std::cout << "Login successful. Session ID: " << session_id_ << " ("
+                << msg << ")" << std::endl;
+      return true;
+    } else {
+      state_ = ConnectionState::CONNECTED_UNAUTHENTICATED;
+      std::cerr << "Login failed: " << msg << std::endl;
+      return false;
+    }
+  } else if (static_cast<PacketType>(resp.header.type) == PacketType::ERROR) {
+    std::string err_msg;
+    PacketBuilder::parseError(resp, err_msg);
+    std::cerr << "Server Error: " << err_msg << std::endl;
+    return false;
+  }
+
+  std::cerr << "Unexpected packet response: " << resp.header.type << std::endl;
+  return false;
+}
+
 bool TcpClient::ping() {
   if (!transport_ || state_ == ConnectionState::DISCONNECTED) {
     std::cerr << "Cannot ping: not connected" << std::endl;
@@ -100,17 +157,17 @@ bool TcpClient::ping() {
 
   Packet response;
   if (!PacketIO::receivePacket(*transport_, response)) {
-    std::cerr << "Failed to receive packet" << std::endl;
+    std::cerr << "Failed to receive response packet" << std::endl;
     disconnect();
     return false;
   }
 
   if (static_cast<PacketType>(response.header.type) == PacketType::PONG) {
     std::cout << "Received PONG" << std::endl;
+    return true;
   } else {
     std::cout << "Received unexpected packet type: " << response.header.type
               << std::endl;
+    return false;
   }
-
-  return true;
 }

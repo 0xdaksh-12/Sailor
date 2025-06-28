@@ -9,12 +9,15 @@ find_package(OpenSSL REQUIRED)
 
 set(SHARED_SOURCES
     common/socket_utils.cpp
+    common/hash.cpp
     protocol/packet_serializer.cpp
     protocol/packet_io.cpp
     transport/tcp_transport.cpp
     transport/tls_transport.cpp
     tls/tls_server.cpp
     tls/tls_client.cpp
+    auth/user_store.cpp
+    auth/auth_manager.cpp
 )
 
 add_executable(
@@ -39,6 +42,7 @@ target_include_directories(
     protocol
     transport
     tls
+    auth
     .
 )
 
@@ -50,6 +54,7 @@ target_include_directories(
     protocol
     transport
     tls
+    auth
     .
 )
 
