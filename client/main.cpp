@@ -1,3 +1,5 @@
+#include <iomanip>
+#include <iostream>
 #include <string>
 
 #include "tcp_client.hpp"
@@ -10,6 +12,7 @@ int main(int argc, char* argv[]) {
   int port = (argc > 2) ? std::stoi(argv[2]) : 9000;
   std::string user = (argc > 3) ? argv[3] : "admin";
   std::string pass = (argc > 4) ? argv[4] : "password123";
+  std::string path = (argc > 5) ? argv[5] : "/";
 
   TcpClient client;
 
@@ -18,13 +21,20 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Ping before login (testing pre-auth behavior)
-  client.ping();
-
-  // Authenticate
   if (client.login(user, pass)) {
-    // Ping after login over the authenticated session
-    client.ping();
+    std::cout << "\nListing directory: " << path << "\n" << std::endl;
+    std::vector<sailor::fs::DirectoryEntry> entries;
+
+    if (client.list(path, entries)) {
+      for (const auto& item : entries) {
+        if (item.is_directory) {
+          std::cout << " [D] " << item.name << "/" << std::endl;
+        } else {
+          std::cout << " [F] " << std::left << std::setw(24) << item.name
+                    << " (" << item.size << " bytes)" << std::endl;
+        }
+      }
+    }
   }
 
   client.disconnect();

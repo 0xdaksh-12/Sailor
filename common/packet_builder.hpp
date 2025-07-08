@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "filesystem/directory_entry.hpp"
+#include "protocol/directory_serializer.hpp"
 #include "protocol/packet.hpp"
 #include "protocol/packet_type.hpp"
 
@@ -109,7 +111,36 @@ class PacketBuilder {
     return packet;
   }
 
-  // Parsing helpers
+  // LIST Request: [uint16_t path_len][path bytes]
+  static Packet listRequest(const std::string& path) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::LIST);
+
+    uint16_t path_len = htobe16(static_cast<uint16_t>(path.size()));
+    packet.payload.resize(sizeof(path_len) + path.size());
+
+    std::memcpy(packet.payload.data(), &path_len, sizeof(path_len));
+    if (!path.empty()) {
+      std::memcpy(packet.payload.data() + sizeof(path_len), path.data(),
+                  path.size());
+    }
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // LIST Response: serialized directory entries
+  static Packet listResponse(
+      const std::vector<sailor::fs::DirectoryEntry>& entries) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::LIST_RESPONSE);
+    packet.payload =
+        sailor::protocol::DirectorySerializer::serialize(entries);
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // Parsers
   static bool parseAuthRequest(const Packet& packet, std::string& out_user,
                                std::string& out_pass) {
     if (packet.payload.size() < sizeof(uint16_t) * 2) return false;
@@ -176,5 +207,26 @@ class PacketBuilder {
         reinterpret_cast<const char*>(packet.payload.data() + sizeof(uint16_t)),
         mlen);
     return true;
+  }
+
+  static bool parseListRequest(const Packet& packet, std::string& out_path) {
+    if (packet.payload.size() < sizeof(uint16_t)) return false;
+
+    uint16_t plen = 0;
+    std::memcpy(&plen, packet.payload.data(), sizeof(plen));
+    plen = be16toh(plen);
+
+    if (packet.payload.size() < sizeof(uint16_t) + plen) return false;
+    out_path.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + sizeof(uint16_t)),
+        plen);
+    return true;
+  }
+
+  static bool parseListResponse(
+      const Packet& packet,
+      std::vector<sailor::fs::DirectoryEntry>& out_entries) {
+    return sailor::protocol::DirectorySerializer::deserialize(packet.payload,
+                                                              out_entries);
   }
 };

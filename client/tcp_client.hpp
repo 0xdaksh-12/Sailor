@@ -2,8 +2,10 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "common/connection_state.hpp"
+#include "filesystem/directory_entry.hpp"
 #include "tls/tls_client.hpp"
 #include "transport/tls_transport.hpp"
 
@@ -15,6 +17,8 @@ class TcpClient {
   bool connectTo(const std::string& host, int port);
   bool login(const std::string& username, const std::string& password);
   bool ping();
+  bool list(const std::string& path,
+            std::vector<sailor::fs::DirectoryEntry>& out_entries);
   void disconnect();
 
   bool isAuthenticated() const {

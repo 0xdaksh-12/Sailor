@@ -171,3 +171,42 @@ bool TcpClient::ping() {
     return false;
   }
 }
+
+bool TcpClient::list(const std::string& path,
+                     std::vector<sailor::fs::DirectoryEntry>& out_entries) {
+  if (!transport_ || state_ != ConnectionState::AUTHENTICATED) {
+    std::cerr << "Cannot list files: not authenticated" << std::endl;
+    return false;
+  }
+
+  Packet req = PacketBuilder::listRequest(path);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    std::cerr << "Failed to send LIST packet" << std::endl;
+    disconnect();
+    return false;
+  }
+
+  Packet resp;
+  if (!PacketIO::receivePacket(*transport_, resp)) {
+    std::cerr << "Failed to receive LIST response" << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(resp.header.type) ==
+      PacketType::LIST_RESPONSE) {
+    if (!PacketBuilder::parseListResponse(resp, out_entries)) {
+      std::cerr << "Failed to parse LIST_RESPONSE" << std::endl;
+      return false;
+    }
+    return true;
+  } else if (static_cast<PacketType>(resp.header.type) == PacketType::ERROR) {
+    std::string err_msg;
+    PacketBuilder::parseError(resp, err_msg);
+    std::cerr << "Server returned error on LIST: " << err_msg << std::endl;
+    return false;
+  }
+
+  std::cerr << "Unexpected packet response: " << resp.header.type << std::endl;
+  return false;
+}

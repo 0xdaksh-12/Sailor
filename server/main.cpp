@@ -10,8 +10,9 @@ int main(int argc, char* argv[]) {
   std::string key_path = (argc > 2) ? argv[2] : "certs/key.pem";
   int port = (argc > 3) ? std::stoi(argv[3]) : 9000;
   std::string user_db = (argc > 4) ? argv[4] : "data/users.db";
+  std::string storage_dir = (argc > 5) ? argv[5] : "server_storage";
 
-  TcpServer server(port, cert_path, key_path, user_db);
+  TcpServer server(port, cert_path, key_path, user_db, storage_dir);
   if (!server.start()) {
     cleanupTls();
     return 1;

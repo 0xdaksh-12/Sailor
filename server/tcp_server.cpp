@@ -16,10 +16,11 @@
 #include "transport/tls_transport.hpp"
 
 TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
-                     std::string user_db_path)
+                     std::string user_db_path, std::string storage_root)
     : port_(port),
       tls_context_(std::move(cert_path), std::move(key_path)),
       auth_manager_(std::move(user_db_path)),
+      file_service_(std::move(storage_root)),
       rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
@@ -61,7 +62,8 @@ bool TcpServer::start() {
   }
 
   std::cout << "Server listening on port " << port_
-            << " (TLS & Auth enabled)" << std::endl;
+            << " (TLS, Auth, Storage: " << file_service_.root() << ")"
+            << std::endl;
   return true;
 }
 
@@ -137,8 +139,37 @@ void TcpServer::handleClient(int client_fd) {
         break;
       }
 
-      // Authorization Guard for protected operations (Phase 5+)
-      case PacketType::LIST:
+      case PacketType::LIST: {
+        if (!session.authenticated) {
+          std::cerr << "[AUTH GUARD] Unauthorized LIST attempt" << std::endl;
+          Packet err = PacketBuilder::error("Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string req_path;
+        if (!PacketBuilder::parseListRequest(packet, req_path)) {
+          Packet err = PacketBuilder::error("Malformed LIST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        try {
+          auto entries = file_service_.listDirectory(req_path);
+          std::cout << "[LIST]\n  User: " << session.username
+                    << "\n  Path: " << (req_path.empty() ? "/" : req_path)
+                    << "\n  Entries: " << entries.size() << std::endl;
+
+          Packet resp = PacketBuilder::listResponse(entries);
+          PacketIO::sendPacket(transport, resp);
+        } catch (const std::exception& e) {
+          std::cerr << "[LIST ERROR] " << e.what() << std::endl;
+          Packet err = PacketBuilder::error(e.what());
+          PacketIO::sendPacket(transport, err);
+        }
+        break;
+      }
+
       case PacketType::UPLOAD_BEGIN:
       case PacketType::DOWNLOAD_REQUEST:
       case PacketType::DELETE_FILE:
@@ -151,7 +182,6 @@ void TcpServer::handleClient(int client_fd) {
           PacketIO::sendPacket(transport, err);
           break;
         }
-        // Allowed operations will dispatch here in Phase 5+
         break;
       }
 

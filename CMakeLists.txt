@@ -12,12 +12,14 @@ set(SHARED_SOURCES
     common/hash.cpp
     protocol/packet_serializer.cpp
     protocol/packet_io.cpp
+    protocol/directory_serializer.cpp
     transport/tcp_transport.cpp
     transport/tls_transport.cpp
     tls/tls_server.cpp
     tls/tls_client.cpp
     auth/user_store.cpp
     auth/auth_manager.cpp
+    filesystem/file_service.cpp
 )
 
 add_executable(
@@ -43,6 +45,7 @@ target_include_directories(
     transport
     tls
     auth
+    filesystem
     .
 )
 
@@ -55,6 +58,7 @@ target_include_directories(
     transport
     tls
     auth
+    filesystem
     .
 )
 
