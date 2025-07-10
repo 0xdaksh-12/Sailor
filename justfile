@@ -27,13 +27,28 @@ init-db:
 server port="9000" cert="certs/cert.pem" key="certs/key.pem" db="data/users.db" storage="server_storage": build
     ./build/sailor-server {{cert}} {{key}} {{port}} {{db}} {{storage}}
 
-# Run the Sailor client (defaults: 127.0.0.1, port 9000, user admin, password password123, path /)
-client host="127.0.0.1" port="9000" user="admin" pass="password123" path="/": build
-    ./build/sailor-client {{host}} {{port}} {{user}} {{pass}} {{path}}
+# List remote directory
+list path="/": build
+    ./build/sailor-client list {{path}}
+
+# Upload local file to remote directory
+upload file target_dir="/": build
+    ./build/sailor-client upload {{file}} {{target_dir}}
 
 # Quick end-to-end test: start server, run client to list files, and stop server
 run: build
     ./build/sailor-server & SERVER_PID=$!; \
     sleep 0.3; \
-    ./build/sailor-client 127.0.0.1 9000 admin password123 /; \
+    ./build/sailor-client list /; \
     kill $SERVER_PID
+
+# End-to-end upload verification test
+test-upload: build
+    dd if=/dev/urandom of=test_upload.bin bs=1M count=5 2>/dev/null
+    ./build/sailor-server & SERVER_PID=$!; \
+    sleep 0.3; \
+    ./build/sailor-client upload test_upload.bin /; \
+    ./build/sailor-client list /; \
+    kill $SERVER_PID; \
+    diff test_upload.bin server_storage/test_upload.bin && echo "Binary exact match confirmed!"; \
+    rm -f test_upload.bin
