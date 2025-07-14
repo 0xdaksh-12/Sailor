@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -11,6 +13,9 @@
 
 class TcpClient {
  public:
+  using ProgressCallback =
+      std::function<void(uint64_t bytes_sent, uint64_t total_bytes)>;
+
   TcpClient();
   ~TcpClient();
 
@@ -19,6 +24,8 @@ class TcpClient {
   bool ping();
   bool list(const std::string& path,
             std::vector<sailor::fs::DirectoryEntry>& out_entries);
+  bool upload(const std::string& local_file_path, const std::string& remote_dir,
+              ProgressCallback progress_cb = nullptr);
   void disconnect();
 
   bool isAuthenticated() const {

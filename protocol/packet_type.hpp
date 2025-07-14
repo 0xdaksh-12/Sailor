@@ -24,5 +24,7 @@ enum class PacketType : uint32_t {
   MKDIR = 14,
 
   SUCCESS = 15,
-  ERROR = 16
+  ERROR = 16,
+
+  UPLOAD_ACK = 17
 };

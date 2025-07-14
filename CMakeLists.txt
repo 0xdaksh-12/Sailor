@@ -20,6 +20,7 @@ set(SHARED_SOURCES
     auth/user_store.cpp
     auth/auth_manager.cpp
     filesystem/file_service.cpp
+    filesystem/upload_service.cpp
 )
 
 add_executable(

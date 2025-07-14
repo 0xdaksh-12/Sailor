@@ -5,7 +5,7 @@
 
 #include "auth/auth_manager.hpp"
 #include "filesystem/file_service.hpp"
-#include "session.hpp"
+#include "filesystem/upload_service.hpp"
 #include "tls/tls_server.hpp"
 
 class TcpServer {
@@ -27,5 +27,6 @@ class TcpServer {
   TlsServerContext tls_context_;
   sailor::auth::AuthManager auth_manager_;
   sailor::fs::FileService file_service_;
+  sailor::fs::UploadService upload_service_;
   std::mt19937_64 rng_;
 };

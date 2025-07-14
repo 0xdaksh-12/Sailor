@@ -14,11 +14,11 @@ class FileService {
 
   std::vector<DirectoryEntry> listDirectory(const std::string& relative_path);
 
+  std::filesystem::path resolvePath(const std::string& relative_path);
+
   const std::filesystem::path& root() const { return root_; }
 
  private:
-  std::filesystem::path resolvePath(const std::string& relative_path);
-
   std::filesystem::path root_;
 };
 

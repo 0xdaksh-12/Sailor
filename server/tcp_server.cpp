@@ -13,6 +13,7 @@
 #include "protocol/packet.hpp"
 #include "protocol/packet_io.hpp"
 #include "protocol/packet_type.hpp"
+#include "session.hpp"
 #include "transport/tls_transport.hpp"
 
 TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
@@ -21,6 +22,7 @@ TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
       tls_context_(std::move(cert_path), std::move(key_path)),
       auth_manager_(std::move(user_db_path)),
       file_service_(std::move(storage_root)),
+      upload_service_(file_service_),
       rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
@@ -62,8 +64,8 @@ bool TcpServer::start() {
   }
 
   std::cout << "Server listening on port " << port_
-            << " (TLS, Auth, Storage: " << file_service_.root() << ")"
-            << std::endl;
+            << " (TLS, Auth, Upload Enabled, Storage: " << file_service_.root()
+            << ")" << std::endl;
   return true;
 }
 
@@ -170,7 +172,99 @@ void TcpServer::handleClient(int client_fd) {
         break;
       }
 
-      case PacketType::UPLOAD_BEGIN:
+      case PacketType::UPLOAD_BEGIN: {
+        if (!session.authenticated) {
+          Packet err = PacketBuilder::error("Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        uint64_t up_id = 0, f_size = 0;
+        std::string r_path, filename, sha256_hash;
+        if (!PacketBuilder::parseUploadBegin(packet, up_id, f_size, r_path,
+                                             filename, sha256_hash)) {
+          Packet err =
+              PacketBuilder::error("Malformed UPLOAD_BEGIN packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::cout << "[UPLOAD_BEGIN]\n  User: " << session.username
+                  << "\n  File: " << filename
+                  << "\n  Size: " << f_size << " bytes"
+                  << "\n  SHA256: " << sha256_hash << std::endl;
+
+        std::string err;
+        if (!upload_service_.beginUpload(up_id, r_path, filename, f_size,
+                                         sha256_hash, err)) {
+          std::cerr << "[UPLOAD ERROR] " << err << std::endl;
+          Packet resp = PacketBuilder::error(err);
+          PacketIO::sendPacket(transport, resp);
+        } else {
+          Packet resp = PacketBuilder::success("Upload session ready");
+          PacketIO::sendPacket(transport, resp);
+        }
+        break;
+      }
+
+      case PacketType::UPLOAD_CHUNK: {
+        if (!session.authenticated) {
+          Packet err = PacketBuilder::error("Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        uint64_t up_id = 0, offset = 0;
+        const uint8_t* chunk_data = nullptr;
+        size_t chunk_size = 0;
+
+        if (!PacketBuilder::parseUploadChunk(packet, up_id, offset, chunk_data,
+                                             chunk_size)) {
+          Packet err =
+              PacketBuilder::error("Malformed UPLOAD_CHUNK packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string err;
+        if (!upload_service_.writeChunk(up_id, offset, chunk_data, chunk_size,
+                                        err)) {
+          std::cerr << "[UPLOAD CHUNK ERROR] " << err << std::endl;
+          Packet resp = PacketBuilder::error(err);
+          PacketIO::sendPacket(transport, resp);
+        }
+        break;
+      }
+
+      case PacketType::UPLOAD_END: {
+        if (!session.authenticated) {
+          Packet err = PacketBuilder::error("Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        uint64_t up_id = 0;
+        if (!PacketBuilder::parseUploadEnd(packet, up_id)) {
+          Packet err = PacketBuilder::error("Malformed UPLOAD_END packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string err;
+        if (!upload_service_.finishUpload(up_id, err)) {
+          std::cerr << "[UPLOAD FINISH ERROR] " << err << std::endl;
+          Packet resp = PacketBuilder::error(err);
+          PacketIO::sendPacket(transport, resp);
+        } else {
+          std::cout << "[UPLOAD]\n  User: " << session.username
+                    << "\n  Status: SUCCESS (Checksum verified)" << std::endl;
+          Packet resp =
+              PacketBuilder::success("Upload verified and completed");
+          PacketIO::sendPacket(transport, resp);
+        }
+        break;
+      }
+
       case PacketType::DOWNLOAD_REQUEST:
       case PacketType::DELETE_FILE:
       case PacketType::RENAME_FILE:

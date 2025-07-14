@@ -27,8 +27,6 @@ class PacketBuilder {
     return packet;
   }
 
-  // AUTH_REQUEST wire format:
-  // [uint16_t ulen][username bytes][uint16_t plen][password bytes]
   static Packet authRequest(const std::string& username,
                             const std::string& password) {
     Packet packet;
@@ -59,8 +57,6 @@ class PacketBuilder {
     return packet;
   }
 
-  // AUTH_RESPONSE wire format:
-  // [uint8_t success (1 or 0)][uint64_t session_id][uint16_t msg_len][msg bytes]
   static Packet authResponse(bool success, uint64_t session_id,
                              const std::string& message) {
     Packet packet;
@@ -93,7 +89,6 @@ class PacketBuilder {
     return packet;
   }
 
-  // ERROR packet: [uint16_t msg_len][msg bytes]
   static Packet error(const std::string& message) {
     Packet packet;
     packet.header.type = static_cast<uint32_t>(PacketType::ERROR);
@@ -111,7 +106,23 @@ class PacketBuilder {
     return packet;
   }
 
-  // LIST Request: [uint16_t path_len][path bytes]
+  static Packet success(const std::string& message = "") {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::SUCCESS);
+
+    uint16_t msg_len = htobe16(static_cast<uint16_t>(message.size()));
+    packet.payload.resize(sizeof(msg_len) + message.size());
+
+    std::memcpy(packet.payload.data(), &msg_len, sizeof(msg_len));
+    if (!message.empty()) {
+      std::memcpy(packet.payload.data() + sizeof(msg_len), message.data(),
+                  message.size());
+    }
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
   static Packet listRequest(const std::string& path) {
     Packet packet;
     packet.header.type = static_cast<uint32_t>(PacketType::LIST);
@@ -129,13 +140,97 @@ class PacketBuilder {
     return packet;
   }
 
-  // LIST Response: serialized directory entries
   static Packet listResponse(
       const std::vector<sailor::fs::DirectoryEntry>& entries) {
     Packet packet;
     packet.header.type = static_cast<uint32_t>(PacketType::LIST_RESPONSE);
     packet.payload =
         sailor::protocol::DirectorySerializer::serialize(entries);
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // UPLOAD_BEGIN:
+  // [uint64_t upload_id][uint64_t file_size][uint16_t path_len][path][uint16_t fn_len][filename][uint16_t hash_len][sha256]
+  static Packet uploadBegin(uint64_t upload_id, uint64_t file_size,
+                            const std::string& remote_path,
+                            const std::string& filename,
+                            const std::string& sha256_hash) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::UPLOAD_BEGIN);
+
+    uint64_t be_id = htobe64(upload_id);
+    uint64_t be_sz = htobe64(file_size);
+    uint16_t p_len = htobe16(static_cast<uint16_t>(remote_path.size()));
+    uint16_t f_len = htobe16(static_cast<uint16_t>(filename.size()));
+    uint16_t h_len = htobe16(static_cast<uint16_t>(sha256_hash.size()));
+
+    size_t total = sizeof(be_id) + sizeof(be_sz) + sizeof(p_len) +
+                   remote_path.size() + sizeof(f_len) + filename.size() +
+                   sizeof(h_len) + sha256_hash.size();
+    packet.payload.resize(total);
+
+    size_t offset = 0;
+    std::memcpy(packet.payload.data() + offset, &be_id, sizeof(be_id));
+    offset += sizeof(be_id);
+    std::memcpy(packet.payload.data() + offset, &be_sz, sizeof(be_sz));
+    offset += sizeof(be_sz);
+    std::memcpy(packet.payload.data() + offset, &p_len, sizeof(p_len));
+    offset += sizeof(p_len);
+    std::memcpy(packet.payload.data() + offset, remote_path.data(),
+                remote_path.size());
+    offset += remote_path.size();
+    std::memcpy(packet.payload.data() + offset, &f_len, sizeof(f_len));
+    offset += sizeof(f_len);
+    std::memcpy(packet.payload.data() + offset, filename.data(),
+                filename.size());
+    offset += filename.size();
+    std::memcpy(packet.payload.data() + offset, &h_len, sizeof(h_len));
+    offset += sizeof(h_len);
+    std::memcpy(packet.payload.data() + offset, sha256_hash.data(),
+                sha256_hash.size());
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // UPLOAD_CHUNK:
+  // [uint64_t upload_id][uint64_t offset][uint32_t chunk_len][data]
+  static Packet uploadChunk(uint64_t upload_id, uint64_t offset,
+                            const uint8_t* data, size_t size) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::UPLOAD_CHUNK);
+
+    uint64_t be_id = htobe64(upload_id);
+    uint64_t be_off = htobe64(offset);
+    uint32_t be_len = htobe32(static_cast<uint32_t>(size));
+
+    size_t total = sizeof(be_id) + sizeof(be_off) + sizeof(be_len) + size;
+    packet.payload.resize(total);
+
+    size_t pos = 0;
+    std::memcpy(packet.payload.data() + pos, &be_id, sizeof(be_id));
+    pos += sizeof(be_id);
+    std::memcpy(packet.payload.data() + pos, &be_off, sizeof(be_off));
+    pos += sizeof(be_off);
+    std::memcpy(packet.payload.data() + pos, &be_len, sizeof(be_len));
+    pos += sizeof(be_len);
+    std::memcpy(packet.payload.data() + pos, data, size);
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // UPLOAD_END:
+  // [uint64_t upload_id]
+  static Packet uploadEnd(uint64_t upload_id) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::UPLOAD_END);
+
+    uint64_t be_id = htobe64(upload_id);
+    packet.payload.resize(sizeof(be_id));
+    std::memcpy(packet.payload.data(), &be_id, sizeof(be_id));
+
     packet.header.payload_size = packet.payload.size();
     return packet;
   }
@@ -209,6 +304,10 @@ class PacketBuilder {
     return true;
   }
 
+  static bool parseSuccess(const Packet& packet, std::string& out_msg) {
+    return parseError(packet, out_msg);
+  }
+
   static bool parseListRequest(const Packet& packet, std::string& out_path) {
     if (packet.payload.size() < sizeof(uint16_t)) return false;
 
@@ -228,5 +327,87 @@ class PacketBuilder {
       std::vector<sailor::fs::DirectoryEntry>& out_entries) {
     return sailor::protocol::DirectorySerializer::deserialize(packet.payload,
                                                               out_entries);
+  }
+
+  static bool parseUploadBegin(const Packet& packet, uint64_t& out_id,
+                               uint64_t& out_size, std::string& out_path,
+                               std::string& out_filename,
+                               std::string& out_hash) {
+    if (packet.payload.size() < sizeof(uint64_t) * 2 + sizeof(uint16_t) * 3)
+      return false;
+
+    size_t pos = 0;
+    uint64_t be_id = 0;
+    std::memcpy(&be_id, packet.payload.data() + pos, sizeof(be_id));
+    pos += sizeof(be_id);
+    out_id = be64toh(be_id);
+
+    uint64_t be_sz = 0;
+    std::memcpy(&be_sz, packet.payload.data() + pos, sizeof(be_sz));
+    pos += sizeof(be_sz);
+    out_size = be64toh(be_sz);
+
+    uint16_t p_len = 0;
+    std::memcpy(&p_len, packet.payload.data() + pos, sizeof(p_len));
+    pos += sizeof(p_len);
+    p_len = be16toh(p_len);
+    if (packet.payload.size() < pos + p_len + sizeof(uint16_t)) return false;
+    out_path.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + pos), p_len);
+    pos += p_len;
+
+    uint16_t f_len = 0;
+    std::memcpy(&f_len, packet.payload.data() + pos, sizeof(f_len));
+    pos += sizeof(f_len);
+    f_len = be16toh(f_len);
+    if (packet.payload.size() < pos + f_len + sizeof(uint16_t)) return false;
+    out_filename.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + pos), f_len);
+    pos += f_len;
+
+    uint16_t h_len = 0;
+    std::memcpy(&h_len, packet.payload.data() + pos, sizeof(h_len));
+    pos += sizeof(h_len);
+    h_len = be16toh(h_len);
+    if (packet.payload.size() < pos + h_len) return false;
+    out_hash.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + pos), h_len);
+
+    return true;
+  }
+
+  static bool parseUploadChunk(const Packet& packet, uint64_t& out_id,
+                               uint64_t& out_offset, const uint8_t*& out_data,
+                               size_t& out_size) {
+    if (packet.payload.size() < sizeof(uint64_t) * 2 + sizeof(uint32_t))
+      return false;
+
+    size_t pos = 0;
+    uint64_t be_id = 0;
+    std::memcpy(&be_id, packet.payload.data() + pos, sizeof(be_id));
+    pos += sizeof(be_id);
+    out_id = be64toh(be_id);
+
+    uint64_t be_off = 0;
+    std::memcpy(&be_off, packet.payload.data() + pos, sizeof(be_off));
+    pos += sizeof(be_off);
+    out_offset = be64toh(be_off);
+
+    uint32_t be_len = 0;
+    std::memcpy(&be_len, packet.payload.data() + pos, sizeof(be_len));
+    pos += sizeof(be_len);
+    out_size = be32toh(be_len);
+
+    if (packet.payload.size() < pos + out_size) return false;
+    out_data = packet.payload.data() + pos;
+    return true;
+  }
+
+  static bool parseUploadEnd(const Packet& packet, uint64_t& out_id) {
+    if (packet.payload.size() < sizeof(uint64_t)) return false;
+    uint64_t be_id = 0;
+    std::memcpy(&be_id, packet.payload.data(), sizeof(be_id));
+    out_id = be64toh(be_id);
+    return true;
   }
 };
