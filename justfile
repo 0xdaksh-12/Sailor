@@ -35,20 +35,20 @@ list path="/": build
 upload file target_dir="/": build
     ./build/sailor-client upload {{file}} {{target_dir}}
 
-# Quick end-to-end test: start server, run client to list files, and stop server
-run: build
-    ./build/sailor-server & SERVER_PID=$!; \
-    sleep 0.3; \
-    ./build/sailor-client list /; \
-    kill $SERVER_PID
+# Download remote file to local destination
+download file dest=".": build
+    ./build/sailor-client download {{file}} {{dest}}
 
-# End-to-end upload verification test
-test-upload: build
-    dd if=/dev/urandom of=test_upload.bin bs=1M count=5 2>/dev/null
+# End-to-end integration test: list directories, upload 10MB file, download it back, and verify exact byte match
+test: build
+    dd if=/dev/urandom of=test_input.bin bs=1M count=10 2>/dev/null
     ./build/sailor-server & SERVER_PID=$!; \
     sleep 0.3; \
-    ./build/sailor-client upload test_upload.bin /; \
     ./build/sailor-client list /; \
+    ./build/sailor-client upload test_input.bin /; \
+    ./build/sailor-client list /; \
+    ./build/sailor-client download test_input.bin test_output.bin; \
     kill $SERVER_PID; \
-    diff test_upload.bin server_storage/test_upload.bin && echo "Binary exact match confirmed!"; \
-    rm -f test_upload.bin
+    diff test_input.bin test_output.bin && echo "All E2E tests PASSED: binary exact match verified!"; \
+    rm -f test_input.bin test_output.bin server_storage/test_input.bin
+
