@@ -26,6 +26,9 @@ class TcpClient {
             std::vector<sailor::fs::DirectoryEntry>& out_entries);
   bool upload(const std::string& local_file_path, const std::string& remote_dir,
               ProgressCallback progress_cb = nullptr);
+  bool download(const std::string& remote_file_path,
+                const std::string& local_dest_path,
+                ProgressCallback progress_cb = nullptr);
   void disconnect();
 
   bool isAuthenticated() const {

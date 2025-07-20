@@ -21,6 +21,7 @@ set(SHARED_SOURCES
     auth/auth_manager.cpp
     filesystem/file_service.cpp
     filesystem/upload_service.cpp
+    filesystem/download_service.cpp
 )
 
 add_executable(

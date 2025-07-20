@@ -64,6 +64,23 @@ int main(int argc, char* argv[]) {
               << std::endl;
     bool ok = client.upload(local_file, remote_dir, printProgressBar);
     std::cout << (ok ? "\nUpload complete." : "\nUpload failed.") << std::endl;
+  } else if (command == "download") {
+    if (argc < 3) {
+      std::cerr << "Usage: " << argv[0] << " download <remote_path> [local_dest]"
+                << std::endl;
+      client.disconnect();
+      cleanupTls();
+      return 1;
+    }
+
+    std::string remote_path = argv[2];
+    std::string local_dest = (argc > 3) ? argv[3] : ".";
+
+    std::cout << "Starting download: " << remote_path << " -> " << local_dest
+              << std::endl;
+    bool ok = client.download(remote_path, local_dest, printProgressBar);
+    std::cout << (ok ? "\nDownload complete." : "\nDownload failed.")
+              << std::endl;
   } else {
     std::string path = (argc > 2) ? argv[2] : "/";
     std::cout << "\nListing directory: " << path << "\n" << std::endl;

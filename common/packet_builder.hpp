@@ -235,6 +235,102 @@ class PacketBuilder {
     return packet;
   }
 
+  // DOWNLOAD_REQUEST:
+  // [uint16_t path_len][remote_path]
+  static Packet downloadRequest(const std::string& remote_path) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::DOWNLOAD_REQUEST);
+
+    uint16_t path_len = htobe16(static_cast<uint16_t>(remote_path.size()));
+    packet.payload.resize(sizeof(path_len) + remote_path.size());
+
+    std::memcpy(packet.payload.data(), &path_len, sizeof(path_len));
+    if (!remote_path.empty()) {
+      std::memcpy(packet.payload.data() + sizeof(path_len), remote_path.data(),
+                  remote_path.size());
+    }
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // DOWNLOAD_BEGIN:
+  // [uint64_t download_id][uint64_t file_size][uint16_t fn_len][filename][uint16_t hash_len][sha256]
+  static Packet downloadBegin(uint64_t download_id, uint64_t file_size,
+                              const std::string& filename,
+                              const std::string& sha256_hash) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::DOWNLOAD_BEGIN);
+
+    uint64_t be_id = htobe64(download_id);
+    uint64_t be_sz = htobe64(file_size);
+    uint16_t f_len = htobe16(static_cast<uint16_t>(filename.size()));
+    uint16_t h_len = htobe16(static_cast<uint16_t>(sha256_hash.size()));
+
+    size_t total = sizeof(be_id) + sizeof(be_sz) + sizeof(f_len) +
+                   filename.size() + sizeof(h_len) + sha256_hash.size();
+    packet.payload.resize(total);
+
+    size_t offset = 0;
+    std::memcpy(packet.payload.data() + offset, &be_id, sizeof(be_id));
+    offset += sizeof(be_id);
+    std::memcpy(packet.payload.data() + offset, &be_sz, sizeof(be_sz));
+    offset += sizeof(be_sz);
+    std::memcpy(packet.payload.data() + offset, &f_len, sizeof(f_len));
+    offset += sizeof(f_len);
+    std::memcpy(packet.payload.data() + offset, filename.data(),
+                filename.size());
+    offset += filename.size();
+    std::memcpy(packet.payload.data() + offset, &h_len, sizeof(h_len));
+    offset += sizeof(h_len);
+    std::memcpy(packet.payload.data() + offset, sha256_hash.data(),
+                sha256_hash.size());
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // DOWNLOAD_CHUNK:
+  // [uint64_t download_id][uint64_t offset][uint32_t chunk_len][data]
+  static Packet downloadChunk(uint64_t download_id, uint64_t offset,
+                              const uint8_t* data, size_t size) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::DOWNLOAD_CHUNK);
+
+    uint64_t be_id = htobe64(download_id);
+    uint64_t be_off = htobe64(offset);
+    uint32_t be_len = htobe32(static_cast<uint32_t>(size));
+
+    size_t total = sizeof(be_id) + sizeof(be_off) + sizeof(be_len) + size;
+    packet.payload.resize(total);
+
+    size_t pos = 0;
+    std::memcpy(packet.payload.data() + pos, &be_id, sizeof(be_id));
+    pos += sizeof(be_id);
+    std::memcpy(packet.payload.data() + pos, &be_off, sizeof(be_off));
+    pos += sizeof(be_off);
+    std::memcpy(packet.payload.data() + pos, &be_len, sizeof(be_len));
+    pos += sizeof(be_len);
+    std::memcpy(packet.payload.data() + pos, data, size);
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // DOWNLOAD_END:
+  // [uint64_t download_id]
+  static Packet downloadEnd(uint64_t download_id) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::DOWNLOAD_END);
+
+    uint64_t be_id = htobe64(download_id);
+    packet.payload.resize(sizeof(be_id));
+    std::memcpy(packet.payload.data(), &be_id, sizeof(be_id));
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
   // Parsers
   static bool parseAuthRequest(const Packet& packet, std::string& out_user,
                                std::string& out_pass) {
@@ -409,5 +505,67 @@ class PacketBuilder {
     std::memcpy(&be_id, packet.payload.data(), sizeof(be_id));
     out_id = be64toh(be_id);
     return true;
+  }
+
+  static bool parseDownloadRequest(const Packet& packet,
+                                   std::string& out_path) {
+    if (packet.payload.size() < sizeof(uint16_t)) return false;
+
+    uint16_t plen = 0;
+    std::memcpy(&plen, packet.payload.data(), sizeof(plen));
+    plen = be16toh(plen);
+
+    if (packet.payload.size() < sizeof(uint16_t) + plen) return false;
+    out_path.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + sizeof(uint16_t)),
+        plen);
+    return true;
+  }
+
+  static bool parseDownloadBegin(const Packet& packet, uint64_t& out_id,
+                                 uint64_t& out_size, std::string& out_filename,
+                                 std::string& out_hash) {
+    if (packet.payload.size() < sizeof(uint64_t) * 2 + sizeof(uint16_t) * 2)
+      return false;
+
+    size_t pos = 0;
+    uint64_t be_id = 0;
+    std::memcpy(&be_id, packet.payload.data() + pos, sizeof(be_id));
+    pos += sizeof(be_id);
+    out_id = be64toh(be_id);
+
+    uint64_t be_sz = 0;
+    std::memcpy(&be_sz, packet.payload.data() + pos, sizeof(be_sz));
+    pos += sizeof(be_sz);
+    out_size = be64toh(be_sz);
+
+    uint16_t f_len = 0;
+    std::memcpy(&f_len, packet.payload.data() + pos, sizeof(f_len));
+    pos += sizeof(f_len);
+    f_len = be16toh(f_len);
+    if (packet.payload.size() < pos + f_len + sizeof(uint16_t)) return false;
+    out_filename.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + pos), f_len);
+    pos += f_len;
+
+    uint16_t h_len = 0;
+    std::memcpy(&h_len, packet.payload.data() + pos, sizeof(h_len));
+    pos += sizeof(h_len);
+    h_len = be16toh(h_len);
+    if (packet.payload.size() < pos + h_len) return false;
+    out_hash.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + pos), h_len);
+
+    return true;
+  }
+
+  static bool parseDownloadChunk(const Packet& packet, uint64_t& out_id,
+                                 uint64_t& out_offset,
+                                 const uint8_t*& out_data, size_t& out_size) {
+    return parseUploadChunk(packet, out_id, out_offset, out_data, out_size);
+  }
+
+  static bool parseDownloadEnd(const Packet& packet, uint64_t& out_id) {
+    return parseUploadEnd(packet, out_id);
   }
 };

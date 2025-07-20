@@ -2,13 +2,16 @@
 
 #include <arpa/inet.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <random>
+#include <sstream>
 
 #include "common/hash.hpp"
 #include "common/packet_builder.hpp"
@@ -325,4 +328,202 @@ bool TcpClient::upload(const std::string& local_file_path,
     std::cerr << "\nUpload failed during verification: " << err << std::endl;
     return false;
   }
+}
+
+bool TcpClient::download(const std::string& remote_file_path,
+                         const std::string& local_dest_path,
+                         ProgressCallback progress_cb) {
+  if (!transport_ || state_ != ConnectionState::AUTHENTICATED) {
+    std::cerr << "Cannot download file: not authenticated" << std::endl;
+    return false;
+  }
+
+  if (remote_file_path.empty()) {
+    std::cerr << "Remote file path cannot be empty" << std::endl;
+    return false;
+  }
+
+  // 1. Send DOWNLOAD_REQUEST
+  Packet req = PacketBuilder::downloadRequest(remote_file_path);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    std::cerr << "Failed to send DOWNLOAD_REQUEST" << std::endl;
+    disconnect();
+    return false;
+  }
+
+  // 2. Receive DOWNLOAD_BEGIN or ERROR
+  Packet begin_pkt;
+  if (!PacketIO::receivePacket(*transport_, begin_pkt)) {
+    std::cerr << "Failed to receive response to DOWNLOAD_REQUEST" << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(begin_pkt.header.type) == PacketType::ERROR) {
+    std::string err;
+    PacketBuilder::parseError(begin_pkt, err);
+    std::cerr << "Download rejected by server: " << err << std::endl;
+    return false;
+  }
+
+  if (static_cast<PacketType>(begin_pkt.header.type) !=
+      PacketType::DOWNLOAD_BEGIN) {
+    std::cerr << "Unexpected packet received: " << begin_pkt.header.type
+              << std::endl;
+    return false;
+  }
+
+  uint64_t download_id = 0, file_size = 0;
+  std::string filename, expected_sha256;
+  if (!PacketBuilder::parseDownloadBegin(begin_pkt, download_id, file_size,
+                                         filename, expected_sha256)) {
+    std::cerr << "Malformed DOWNLOAD_BEGIN packet" << std::endl;
+    return false;
+  }
+
+  // Resolve local destination path
+  stdfs::path target_path(local_dest_path);
+  std::error_code ec;
+  if (stdfs::is_directory(target_path, ec) ||
+      (!local_dest_path.empty() && (local_dest_path.back() == '/' ||
+                                    local_dest_path.back() == '\\'))) {
+    if (!stdfs::exists(target_path, ec)) {
+      stdfs::create_directories(target_path, ec);
+    }
+    target_path /= filename;
+  } else if (target_path.has_parent_path() &&
+             !stdfs::exists(target_path.parent_path(), ec)) {
+    stdfs::create_directories(target_path.parent_path(), ec);
+  }
+
+  std::cout << "Downloading '" << filename << "' (" << file_size
+            << " bytes) -> " << target_path.string() << std::endl;
+
+  std::ofstream outfile(target_path, std::ios::binary | std::ios::trunc);
+  if (!outfile.is_open()) {
+    std::cerr << "Failed to open local destination file for writing: "
+              << target_path << std::endl;
+    return false;
+  }
+
+  EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+  if (!mdctx || EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr) != 1) {
+    if (mdctx) EVP_MD_CTX_free(mdctx);
+    outfile.close();
+    stdfs::remove(target_path, ec);
+    std::cerr << "Failed to initialize hash context" << std::endl;
+    return false;
+  }
+
+  uint64_t received_bytes = 0;
+  bool download_complete = false;
+
+  while (true) {
+    Packet chunk_pkt;
+    if (!PacketIO::receivePacket(*transport_, chunk_pkt)) {
+      std::cerr << "Connection lost while receiving download stream"
+                << std::endl;
+      disconnect();
+      break;
+    }
+
+    auto ptype = static_cast<PacketType>(chunk_pkt.header.type);
+
+    if (ptype == PacketType::DOWNLOAD_CHUNK) {
+      uint64_t chunk_id = 0, offset = 0;
+      const uint8_t* chunk_data = nullptr;
+      size_t chunk_size = 0;
+
+      if (!PacketBuilder::parseDownloadChunk(chunk_pkt, chunk_id, offset,
+                                             chunk_data, chunk_size)) {
+        std::cerr << "Malformed DOWNLOAD_CHUNK packet" << std::endl;
+        break;
+      }
+
+      if (chunk_id != download_id) {
+        std::cerr << "Mismatched download ID: expected " << download_id
+                  << ", got " << chunk_id << std::endl;
+        break;
+      }
+
+      if (offset != received_bytes) {
+        std::cerr << "Chunk offset mismatch: expected " << received_bytes
+                  << ", got " << offset << std::endl;
+        break;
+      }
+
+      if (chunk_size > 0) {
+        outfile.write(reinterpret_cast<const char*>(chunk_data), chunk_size);
+        if (!outfile.good()) {
+          std::cerr << "Disk write error at offset " << offset << std::endl;
+          break;
+        }
+
+        EVP_DigestUpdate(mdctx, chunk_data, chunk_size);
+        received_bytes += chunk_size;
+
+        if (progress_cb) {
+          progress_cb(received_bytes, file_size);
+        }
+      }
+    } else if (ptype == PacketType::DOWNLOAD_END) {
+      uint64_t end_id = 0;
+      if (!PacketBuilder::parseDownloadEnd(chunk_pkt, end_id) ||
+          end_id != download_id) {
+        std::cerr << "Invalid DOWNLOAD_END packet" << std::endl;
+        break;
+      }
+      download_complete = true;
+      break;
+    } else if (ptype == PacketType::ERROR) {
+      std::string err_msg;
+      PacketBuilder::parseError(chunk_pkt, err_msg);
+      std::cerr << "\nServer aborted download: " << err_msg << std::endl;
+      break;
+    } else {
+      std::cerr << "\nUnexpected packet type during download: "
+                << static_cast<uint32_t>(ptype) << std::endl;
+      break;
+    }
+  }
+
+  outfile.flush();
+  outfile.close();
+
+  unsigned char hash[EVP_MAX_MD_SIZE];
+  unsigned int hash_len = 0;
+  EVP_DigestFinal_ex(mdctx, hash, &hash_len);
+  EVP_MD_CTX_free(mdctx);
+
+  if (!download_complete) {
+    stdfs::remove(target_path, ec);
+    std::cerr << "\nDownload failed before completion." << std::endl;
+    return false;
+  }
+
+  if (received_bytes != file_size) {
+    stdfs::remove(target_path, ec);
+    std::cerr << "\nSize mismatch: received " << received_bytes
+              << " bytes, expected " << file_size << " bytes." << std::endl;
+    return false;
+  }
+
+  std::ostringstream oss;
+  for (unsigned int i = 0; i < hash_len; ++i) {
+    oss << std::hex << std::setw(2) << std::setfill('0')
+        << static_cast<int>(hash[i]);
+  }
+  std::string calculated_hash = oss.str();
+
+  if (calculated_hash != expected_sha256) {
+    stdfs::remove(target_path, ec);
+    std::cerr << "\nChecksum verification FAILED!"
+              << "\n  Expected: " << expected_sha256
+              << "\n  Got:      " << calculated_hash << std::endl;
+    return false;
+  }
+
+  std::cout << "\nDownload verified and completed successfully."
+            << "\n  SHA256: " << calculated_hash << std::endl;
+  return true;
 }

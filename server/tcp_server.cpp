@@ -23,6 +23,7 @@ TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
       auth_manager_(std::move(user_db_path)),
       file_service_(std::move(storage_root)),
       upload_service_(file_service_),
+      download_service_(file_service_),
       rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
@@ -64,8 +65,8 @@ bool TcpServer::start() {
   }
 
   std::cout << "Server listening on port " << port_
-            << " (TLS, Auth, Upload Enabled, Storage: " << file_service_.root()
-            << ")" << std::endl;
+            << " (TLS, Auth, Upload, Download Enabled, Storage: "
+            << file_service_.root() << ")" << std::endl;
   return true;
 }
 
@@ -265,7 +266,45 @@ void TcpServer::handleClient(int client_fd) {
         break;
       }
 
-      case PacketType::DOWNLOAD_REQUEST:
+      case PacketType::DOWNLOAD_REQUEST: {
+        if (!session.authenticated) {
+          Packet err = PacketBuilder::error("Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string req_path;
+        if (!PacketBuilder::parseDownloadRequest(packet, req_path)) {
+          Packet err =
+              PacketBuilder::error("Malformed DOWNLOAD_REQUEST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        sailor::fs::DownloadFileMetadata meta;
+        std::string err;
+        if (!download_service_.prepareDownload(req_path, meta, err)) {
+          std::cerr << "[DOWNLOAD ERROR] " << err << std::endl;
+          Packet resp = PacketBuilder::error(err);
+          PacketIO::sendPacket(transport, resp);
+          break;
+        }
+
+        std::cout << "[DOWNLOAD_BEGIN]\n  User: " << session.username
+                  << "\n  Path: " << req_path
+                  << "\n  File: " << meta.filename
+                  << "\n  Size: " << meta.file_size << " bytes"
+                  << "\n  SHA256: " << meta.sha256_hash << std::endl;
+
+        if (!download_service_.streamFile(transport, meta, err)) {
+          std::cerr << "[DOWNLOAD STREAM ERROR] " << err << std::endl;
+        } else {
+          std::cout << "[DOWNLOAD]\n  User: " << session.username
+                    << "\n  Status: SUCCESS (Stream completed)" << std::endl;
+        }
+        break;
+      }
+
       case PacketType::DELETE_FILE:
       case PacketType::RENAME_FILE:
       case PacketType::MKDIR: {
