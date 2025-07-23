@@ -3,3 +3,5 @@ a.out
 .direnv/
 .DS_Store
 received_file
+compile_commands.json
+logs/
