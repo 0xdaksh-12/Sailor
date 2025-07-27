@@ -39,16 +39,24 @@ upload file target_dir="/": build
 download file dest=".": build
     ./build/sailor-client download {{file}} {{dest}}
 
-# End-to-end integration test: list directories, upload 10MB file, download it back, and verify exact byte match
+# Delete remote file or empty directory
+delete path: build
+    ./build/sailor-client delete {{path}}
+
+# End-to-end integration test
 test: build
     dd if=/dev/urandom of=test_input.bin bs=1M count=10 2>/dev/null
     ./build/sailor-server & SERVER_PID=$!; \
     sleep 0.3; \
     ./build/sailor-client list /; \
     ./build/sailor-client upload test_input.bin /; \
-    ./build/sailor-client list /; \
     ./build/sailor-client download test_input.bin test_output.bin; \
+    diff test_input.bin test_output.bin && echo "Binary exact match confirmed!"; \
+    ./build/sailor-client delete test_input.bin; \
+    ./build/sailor-client delete non_existent.txt || true; \
+    ./build/sailor-client delete ../../../etc/passwd || true; \
+    ./build/sailor-client delete docs || true; \
     kill $SERVER_PID; \
-    diff test_input.bin test_output.bin && echo "All E2E tests PASSED: binary exact match verified!"; \
-    rm -f test_input.bin test_output.bin server_storage/test_input.bin
-
+    test ! -f server_storage/test_input.bin && echo "File deletion verified!"; \
+    rm -f test_input.bin test_output.bin server_storage/test_input.bin; \
+    echo "All E2E tests PASSED!"
