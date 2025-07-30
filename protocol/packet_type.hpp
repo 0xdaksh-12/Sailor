@@ -29,5 +29,8 @@ enum class PacketType : uint32_t {
   UPLOAD_ACK = 17,
 
   DOWNLOAD_BEGIN = 18,
-  DOWNLOAD_END = 19
+  DOWNLOAD_END = 19,
+
+  DELETE_REQUEST = 20,
+  DELETE_RESPONSE = 21
 };

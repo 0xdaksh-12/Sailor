@@ -4,6 +4,7 @@
 #include <string>
 
 #include "auth/auth_manager.hpp"
+#include "filesystem/delete_service.hpp"
 #include "filesystem/download_service.hpp"
 #include "filesystem/file_service.hpp"
 #include "filesystem/upload_service.hpp"
@@ -30,5 +31,6 @@ class TcpServer {
   sailor::fs::FileService file_service_;
   sailor::fs::UploadService upload_service_;
   sailor::fs::DownloadService download_service_;
+  sailor::fs::DeleteService delete_service_;
   std::mt19937_64 rng_;
 };

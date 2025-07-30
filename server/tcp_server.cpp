@@ -24,6 +24,7 @@ TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
       file_service_(std::move(storage_root)),
       upload_service_(file_service_),
       download_service_(file_service_),
+      delete_service_(file_service_),
       rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
@@ -65,7 +66,7 @@ bool TcpServer::start() {
   }
 
   std::cout << "Server listening on port " << port_
-            << " (TLS, Auth, Upload, Download Enabled, Storage: "
+            << " (TLS, Auth, Upload, Download, Delete Enabled, Storage: "
             << file_service_.root() << ")" << std::endl;
   return true;
 }
@@ -302,6 +303,37 @@ void TcpServer::handleClient(int client_fd) {
           std::cout << "[DOWNLOAD]\n  User: " << session.username
                     << "\n  Status: SUCCESS (Stream completed)" << std::endl;
         }
+        break;
+      }
+
+      case PacketType::DELETE_REQUEST: {
+        if (!session.authenticated) {
+          std::cerr << "[AUTH GUARD] Unauthorized DELETE attempt" << std::endl;
+          Packet err =
+              PacketBuilder::deleteResponse(false, "Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string target_path;
+        if (!PacketBuilder::parseDeleteRequest(packet, target_path)) {
+          Packet err = PacketBuilder::deleteResponse(
+              false, "Malformed DELETE_REQUEST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string result_msg;
+        bool ok = delete_service_.deletePath(target_path, session.username,
+                                             result_msg);
+
+        std::cout << "[DELETE]\n  User: " << session.username
+                  << "\n  Path: " << target_path
+                  << "\n  Status: " << (ok ? "SUCCESS" : "FAILED")
+                  << "\n  Detail: " << result_msg << std::endl;
+
+        Packet resp = PacketBuilder::deleteResponse(ok, result_msg);
+        PacketIO::sendPacket(transport, resp);
         break;
       }
 

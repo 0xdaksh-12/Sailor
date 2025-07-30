@@ -81,6 +81,24 @@ int main(int argc, char* argv[]) {
     bool ok = client.download(remote_path, local_dest, printProgressBar);
     std::cout << (ok ? "\nDownload complete." : "\nDownload failed.")
               << std::endl;
+  } else if (command == "delete") {
+    if (argc < 3) {
+      std::cerr << "Usage: " << argv[0] << " delete <remote_path>"
+                << std::endl;
+      client.disconnect();
+      cleanupTls();
+      return 1;
+    }
+
+    std::string remote_path = argv[2];
+    std::string result_msg;
+    std::cout << "Deleting remote path: " << remote_path << std::endl;
+    bool ok = client.deleteFile(remote_path, result_msg);
+    if (ok) {
+      std::cout << "Delete SUCCESS: " << result_msg << std::endl;
+    } else {
+      std::cerr << "Delete FAILED: " << result_msg << std::endl;
+    }
   } else {
     std::string path = (argc > 2) ? argv[2] : "/";
     std::cout << "\nListing directory: " << path << "\n" << std::endl;

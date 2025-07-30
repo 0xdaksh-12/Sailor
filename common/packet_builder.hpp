@@ -331,6 +331,50 @@ class PacketBuilder {
     return packet;
   }
 
+  // DELETE_REQUEST:
+  // [uint16_t path_len][remote_path]
+  static Packet deleteRequest(const std::string& remote_path) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::DELETE_REQUEST);
+
+    uint16_t p_len = htobe16(static_cast<uint16_t>(remote_path.size()));
+    packet.payload.resize(sizeof(p_len) + remote_path.size());
+
+    std::memcpy(packet.payload.data(), &p_len, sizeof(p_len));
+    if (!remote_path.empty()) {
+      std::memcpy(packet.payload.data() + sizeof(p_len), remote_path.data(),
+                  remote_path.size());
+    }
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // DELETE_RESPONSE:
+  // [uint8_t success (1 or 0)][uint16_t msg_len][msg bytes]
+  static Packet deleteResponse(bool success, const std::string& message) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::DELETE_RESPONSE);
+
+    uint8_t status = success ? 1 : 0;
+    uint16_t m_len = htobe16(static_cast<uint16_t>(message.size()));
+
+    packet.payload.resize(sizeof(status) + sizeof(m_len) + message.size());
+    size_t offset = 0;
+    packet.payload[offset++] = status;
+
+    std::memcpy(packet.payload.data() + offset, &m_len, sizeof(m_len));
+    offset += sizeof(m_len);
+
+    if (!message.empty()) {
+      std::memcpy(packet.payload.data() + offset, message.data(),
+                  message.size());
+    }
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
   // Parsers
   static bool parseAuthRequest(const Packet& packet, std::string& out_user,
                                std::string& out_pass) {
@@ -567,5 +611,28 @@ class PacketBuilder {
 
   static bool parseDownloadEnd(const Packet& packet, uint64_t& out_id) {
     return parseUploadEnd(packet, out_id);
+  }
+
+  static bool parseDeleteRequest(const Packet& packet, std::string& out_path) {
+    return parseListRequest(packet, out_path);
+  }
+
+  static bool parseDeleteResponse(const Packet& packet, bool& out_success,
+                                  std::string& out_message) {
+    if (packet.payload.size() < sizeof(uint8_t) + sizeof(uint16_t))
+      return false;
+
+    size_t offset = 0;
+    out_success = (packet.payload[offset++] == 1);
+
+    uint16_t m_len = 0;
+    std::memcpy(&m_len, packet.payload.data() + offset, sizeof(m_len));
+    m_len = be16toh(m_len);
+    offset += sizeof(m_len);
+
+    if (packet.payload.size() < offset + m_len) return false;
+    out_message.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + offset), m_len);
+    return true;
   }
 };

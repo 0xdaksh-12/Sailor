@@ -527,3 +527,53 @@ bool TcpClient::download(const std::string& remote_file_path,
             << "\n  SHA256: " << calculated_hash << std::endl;
   return true;
 }
+
+bool TcpClient::deleteFile(const std::string& remote_path,
+                           std::string& out_message) {
+  if (!transport_ || state_ != ConnectionState::AUTHENTICATED) {
+    out_message = "Cannot delete: not authenticated";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  if (remote_path.empty()) {
+    out_message = "Remote path cannot be empty";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  Packet req = PacketBuilder::deleteRequest(remote_path);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    out_message = "Failed to send DELETE_REQUEST";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  Packet resp;
+  if (!PacketIO::receivePacket(*transport_, resp)) {
+    out_message = "Failed to receive DELETE_RESPONSE";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(resp.header.type) ==
+      PacketType::DELETE_RESPONSE) {
+    bool success = false;
+    if (!PacketBuilder::parseDeleteResponse(resp, success, out_message)) {
+      out_message = "Malformed DELETE_RESPONSE packet";
+      std::cerr << out_message << std::endl;
+      return false;
+    }
+    return success;
+  } else if (static_cast<PacketType>(resp.header.type) == PacketType::ERROR) {
+    PacketBuilder::parseError(resp, out_message);
+    return false;
+  }
+
+  out_message =
+      "Unexpected packet response: " + std::to_string(resp.header.type);
+  std::cerr << out_message << std::endl;
+  return false;
+}

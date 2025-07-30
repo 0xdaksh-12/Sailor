@@ -29,6 +29,7 @@ class TcpClient {
   bool download(const std::string& remote_file_path,
                 const std::string& local_dest_path,
                 ProgressCallback progress_cb = nullptr);
+  bool deleteFile(const std::string& remote_path, std::string& out_message);
   void disconnect();
 
   bool isAuthenticated() const {
