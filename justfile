@@ -43,6 +43,14 @@ download file dest=".": build
 delete path: build
     ./build/sailor-client delete {{path}}
 
+# Rename remote file or directory
+rename src dst: build
+    ./build/sailor-client rename {{src}} {{dst}}
+
+# Move remote file or directory (alias for rename)
+move src dst: build
+    ./build/sailor-client move {{src}} {{dst}}
+
 # End-to-end integration test
 test: build
     dd if=/dev/urandom of=test_input.bin bs=1M count=10 2>/dev/null
@@ -50,13 +58,16 @@ test: build
     sleep 0.3; \
     ./build/sailor-client list /; \
     ./build/sailor-client upload test_input.bin /; \
-    ./build/sailor-client download test_input.bin test_output.bin; \
+    ./build/sailor-client rename test_input.bin test_renamed.bin; \
+    ./build/sailor-client move test_renamed.bin docs/test_moved.bin; \
+    ./build/sailor-client download docs/test_moved.bin test_output.bin; \
     diff test_input.bin test_output.bin && echo "Binary exact match confirmed!"; \
-    ./build/sailor-client delete test_input.bin; \
+    ./build/sailor-client delete docs/test_moved.bin; \
     ./build/sailor-client delete non_existent.txt || true; \
     ./build/sailor-client delete ../../../etc/passwd || true; \
     ./build/sailor-client delete docs || true; \
     kill $SERVER_PID; \
-    test ! -f server_storage/test_input.bin && echo "File deletion verified!"; \
-    rm -f test_input.bin test_output.bin server_storage/test_input.bin; \
+    test ! -f server_storage/docs/test_moved.bin && echo "File lifecycle verified!"; \
+    rm -f test_input.bin test_output.bin server_storage/test_input.bin server_storage/docs/test_moved.bin; \
     echo "All E2E tests PASSED!"
+
