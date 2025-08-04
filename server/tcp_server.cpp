@@ -25,6 +25,7 @@ TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
       upload_service_(file_service_),
       download_service_(file_service_),
       delete_service_(file_service_),
+      rename_service_(file_service_),
       rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
@@ -66,7 +67,8 @@ bool TcpServer::start() {
   }
 
   std::cout << "Server listening on port " << port_
-            << " (TLS, Auth, Upload, Download, Delete Enabled, Storage: "
+            << " (TLS, Auth, Upload, Download, Delete, Rename/Move Enabled, "
+               "Storage: "
             << file_service_.root() << ")" << std::endl;
   return true;
 }
@@ -333,6 +335,38 @@ void TcpServer::handleClient(int client_fd) {
                   << "\n  Detail: " << result_msg << std::endl;
 
         Packet resp = PacketBuilder::deleteResponse(ok, result_msg);
+        PacketIO::sendPacket(transport, resp);
+        break;
+      }
+
+      case PacketType::RENAME_REQUEST: {
+        if (!session.authenticated) {
+          std::cerr << "[AUTH GUARD] Unauthorized RENAME attempt" << std::endl;
+          Packet err =
+              PacketBuilder::renameResponse(false, "Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string src, dst;
+        if (!PacketBuilder::parseRenameRequest(packet, src, dst)) {
+          Packet err = PacketBuilder::renameResponse(
+              false, "Malformed RENAME_REQUEST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string result_msg;
+        bool ok = rename_service_.renamePath(src, dst, session.username,
+                                             result_msg);
+
+        std::cout << "[RENAME]\n  User: " << session.username
+                  << "\n  Source: " << src
+                  << "\n  Dest:   " << dst
+                  << "\n  Status: " << (ok ? "SUCCESS" : "FAILED")
+                  << "\n  Detail: " << result_msg << std::endl;
+
+        Packet resp = PacketBuilder::renameResponse(ok, result_msg);
         PacketIO::sendPacket(transport, resp);
         break;
       }

@@ -23,6 +23,7 @@ set(SHARED_SOURCES
     filesystem/upload_service.cpp
     filesystem/download_service.cpp
     filesystem/delete_service.cpp
+    filesystem/rename_service.cpp
 )
 
 add_executable(

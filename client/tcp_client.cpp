@@ -577,3 +577,54 @@ bool TcpClient::deleteFile(const std::string& remote_path,
   std::cerr << out_message << std::endl;
   return false;
 }
+
+bool TcpClient::rename(const std::string& source,
+                       const std::string& destination,
+                       std::string& out_message) {
+  if (!transport_ || state_ != ConnectionState::AUTHENTICATED) {
+    out_message = "Cannot rename/move: not authenticated";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  if (source.empty() || destination.empty()) {
+    out_message = "Source and destination paths cannot be empty";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  Packet req = PacketBuilder::renameRequest(source, destination);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    out_message = "Failed to send RENAME_REQUEST";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  Packet resp;
+  if (!PacketIO::receivePacket(*transport_, resp)) {
+    out_message = "Failed to receive RENAME_RESPONSE";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(resp.header.type) ==
+      PacketType::RENAME_RESPONSE) {
+    bool success = false;
+    if (!PacketBuilder::parseRenameResponse(resp, success, out_message)) {
+      out_message = "Malformed RENAME_RESPONSE packet";
+      std::cerr << out_message << std::endl;
+      return false;
+    }
+    return success;
+  } else if (static_cast<PacketType>(resp.header.type) == PacketType::ERROR) {
+    PacketBuilder::parseError(resp, out_message);
+    return false;
+  }
+
+  out_message =
+      "Unexpected packet response: " + std::to_string(resp.header.type);
+  std::cerr << out_message << std::endl;
+  return false;
+}

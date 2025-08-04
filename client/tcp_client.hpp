@@ -30,6 +30,8 @@ class TcpClient {
                 const std::string& local_dest_path,
                 ProgressCallback progress_cb = nullptr);
   bool deleteFile(const std::string& remote_path, std::string& out_message);
+  bool rename(const std::string& source, const std::string& destination,
+              std::string& out_message);
   void disconnect();
 
   bool isAuthenticated() const {

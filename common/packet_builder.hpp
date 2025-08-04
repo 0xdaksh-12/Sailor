@@ -375,6 +375,47 @@ class PacketBuilder {
     return packet;
   }
 
+  // RENAME_REQUEST:
+  // [uint16_t src_len][source_path][uint16_t dst_len][destination_path]
+  static Packet renameRequest(const std::string& source,
+                              const std::string& destination) {
+    Packet packet;
+    packet.header.type = static_cast<uint32_t>(PacketType::RENAME_REQUEST);
+
+    uint16_t s_len = htobe16(static_cast<uint16_t>(source.size()));
+    uint16_t d_len = htobe16(static_cast<uint16_t>(destination.size()));
+
+    size_t total = sizeof(s_len) + source.size() + sizeof(d_len) +
+                   destination.size();
+    packet.payload.resize(total);
+
+    size_t offset = 0;
+    std::memcpy(packet.payload.data() + offset, &s_len, sizeof(s_len));
+    offset += sizeof(s_len);
+    if (!source.empty()) {
+      std::memcpy(packet.payload.data() + offset, source.data(), source.size());
+      offset += source.size();
+    }
+
+    std::memcpy(packet.payload.data() + offset, &d_len, sizeof(d_len));
+    offset += sizeof(d_len);
+    if (!destination.empty()) {
+      std::memcpy(packet.payload.data() + offset, destination.data(),
+                  destination.size());
+    }
+
+    packet.header.payload_size = packet.payload.size();
+    return packet;
+  }
+
+  // RENAME_RESPONSE:
+  // [uint8_t success (1 or 0)][uint16_t msg_len][msg bytes]
+  static Packet renameResponse(bool success, const std::string& message) {
+    Packet packet = deleteResponse(success, message);
+    packet.header.type = static_cast<uint32_t>(PacketType::RENAME_RESPONSE);
+    return packet;
+  }
+
   // Parsers
   static bool parseAuthRequest(const Packet& packet, std::string& out_user,
                                std::string& out_pass) {
@@ -634,5 +675,36 @@ class PacketBuilder {
     out_message.assign(
         reinterpret_cast<const char*>(packet.payload.data() + offset), m_len);
     return true;
+  }
+
+  static bool parseRenameRequest(const Packet& packet, std::string& out_source,
+                                 std::string& out_dest) {
+    if (packet.payload.size() < sizeof(uint16_t) * 2) return false;
+
+    size_t offset = 0;
+    uint16_t s_len = 0;
+    std::memcpy(&s_len, packet.payload.data() + offset, sizeof(s_len));
+    s_len = be16toh(s_len);
+    offset += sizeof(s_len);
+
+    if (packet.payload.size() < offset + s_len + sizeof(uint16_t)) return false;
+    out_source.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + offset), s_len);
+    offset += s_len;
+
+    uint16_t d_len = 0;
+    std::memcpy(&d_len, packet.payload.data() + offset, sizeof(d_len));
+    d_len = be16toh(d_len);
+    offset += sizeof(d_len);
+
+    if (packet.payload.size() < offset + d_len) return false;
+    out_dest.assign(
+        reinterpret_cast<const char*>(packet.payload.data() + offset), d_len);
+    return true;
+  }
+
+  static bool parseRenameResponse(const Packet& packet, bool& out_success,
+                                  std::string& out_message) {
+    return parseDeleteResponse(packet, out_success, out_message);
   }
 };

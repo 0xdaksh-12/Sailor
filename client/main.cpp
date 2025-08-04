@@ -99,6 +99,25 @@ int main(int argc, char* argv[]) {
     } else {
       std::cerr << "Delete FAILED: " << result_msg << std::endl;
     }
+  } else if (command == "rename" || command == "move") {
+    if (argc < 4) {
+      std::cerr << "Usage: " << argv[0] << " " << command
+                << " <source_path> <dest_path>" << std::endl;
+      client.disconnect();
+      cleanupTls();
+      return 1;
+    }
+
+    std::string src = argv[2];
+    std::string dst = argv[3];
+    std::string result_msg;
+    std::cout << "Renaming/Moving: " << src << " -> " << dst << std::endl;
+    bool ok = client.rename(src, dst, result_msg);
+    if (ok) {
+      std::cout << "Rename SUCCESS: " << result_msg << std::endl;
+    } else {
+      std::cerr << "Rename FAILED: " << result_msg << std::endl;
+    }
   } else {
     std::string path = (argc > 2) ? argv[2] : "/";
     std::cout << "\nListing directory: " << path << "\n" << std::endl;

@@ -7,6 +7,7 @@
 #include "filesystem/delete_service.hpp"
 #include "filesystem/download_service.hpp"
 #include "filesystem/file_service.hpp"
+#include "filesystem/rename_service.hpp"
 #include "filesystem/upload_service.hpp"
 #include "tls/tls_server.hpp"
 
@@ -32,5 +33,6 @@ class TcpServer {
   sailor::fs::UploadService upload_service_;
   sailor::fs::DownloadService download_service_;
   sailor::fs::DeleteService delete_service_;
+  sailor::fs::RenameService rename_service_;
   std::mt19937_64 rng_;
 };

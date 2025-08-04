@@ -32,5 +32,8 @@ enum class PacketType : uint32_t {
   DOWNLOAD_END = 19,
 
   DELETE_REQUEST = 20,
-  DELETE_RESPONSE = 21
+  DELETE_RESPONSE = 21,
+
+  RENAME_REQUEST = 22,
+  RENAME_RESPONSE = 23
 };
