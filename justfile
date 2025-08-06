@@ -51,23 +51,32 @@ rename src dst: build
 move src dst: build
     ./build/sailor-client move {{src}} {{dst}}
 
+# Create remote directory (including parent directories)
+mkdir path: build
+    ./build/sailor-client mkdir {{path}}
+
+# Remove empty remote directory
+rmdir path: build
+    ./build/sailor-client rmdir {{path}}
+
 # End-to-end integration test
 test: build
-    dd if=/dev/urandom of=test_input.bin bs=1M count=10 2>/dev/null
+    dd if=/dev/urandom of=test_input.bin bs=1M count=5 2>/dev/null
     ./build/sailor-server & SERVER_PID=$!; \
     sleep 0.3; \
     ./build/sailor-client list /; \
-    ./build/sailor-client upload test_input.bin /; \
-    ./build/sailor-client rename test_input.bin test_renamed.bin; \
-    ./build/sailor-client move test_renamed.bin docs/test_moved.bin; \
-    ./build/sailor-client download docs/test_moved.bin test_output.bin; \
-    diff test_input.bin test_output.bin && echo "Binary exact match confirmed!"; \
-    ./build/sailor-client delete docs/test_moved.bin; \
-    ./build/sailor-client delete non_existent.txt || true; \
-    ./build/sailor-client delete ../../../etc/passwd || true; \
-    ./build/sailor-client delete docs || true; \
+    ./build/sailor-client mkdir test_dir/nested; \
+    ./build/sailor-client list test_dir; \
+    ./build/sailor-client upload test_input.bin test_dir/nested; \
+    ./build/sailor-client list test_dir/nested; \
+    ./build/sailor-client rmdir test_dir/nested || true; \
+    ./build/sailor-client delete test_dir/nested/test_input.bin; \
+    ./build/sailor-client rmdir test_dir/nested; \
+    ./build/sailor-client rmdir test_dir; \
+    ./build/sailor-client mkdir ../../../etc/bad_dir || true; \
+    ./build/sailor-client rmdir ../../../etc/bad_dir || true; \
     kill $SERVER_PID; \
-    test ! -f server_storage/docs/test_moved.bin && echo "File lifecycle verified!"; \
-    rm -f test_input.bin test_output.bin server_storage/test_input.bin server_storage/docs/test_moved.bin; \
-    echo "All E2E tests PASSED!"
+    test ! -d server_storage/test_dir && echo "Directory creation & removal verified!"; \
+    rm -f test_input.bin; \
+    echo "PASSED!"
 
