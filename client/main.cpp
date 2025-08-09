@@ -118,6 +118,40 @@ int main(int argc, char* argv[]) {
     } else {
       std::cerr << "Rename FAILED: " << result_msg << std::endl;
     }
+  } else if (command == "mkdir") {
+    if (argc < 3) {
+      std::cerr << "Usage: " << argv[0] << " mkdir <path>" << std::endl;
+      client.disconnect();
+      cleanupTls();
+      return 1;
+    }
+
+    std::string path = argv[2];
+    std::string result_msg;
+    std::cout << "Creating directory: " << path << std::endl;
+    bool ok = client.mkdir(path, result_msg);
+    if (ok) {
+      std::cout << "MKDIR SUCCESS: " << result_msg << std::endl;
+    } else {
+      std::cerr << "MKDIR FAILED: " << result_msg << std::endl;
+    }
+  } else if (command == "rmdir") {
+    if (argc < 3) {
+      std::cerr << "Usage: " << argv[0] << " rmdir <path>" << std::endl;
+      client.disconnect();
+      cleanupTls();
+      return 1;
+    }
+
+    std::string path = argv[2];
+    std::string result_msg;
+    std::cout << "Removing directory: " << path << std::endl;
+    bool ok = client.rmdir(path, result_msg);
+    if (ok) {
+      std::cout << "RMDIR SUCCESS: " << result_msg << std::endl;
+    } else {
+      std::cerr << "RMDIR FAILED: " << result_msg << std::endl;
+    }
   } else {
     std::string path = (argc > 2) ? argv[2] : "/";
     std::cout << "\nListing directory: " << path << "\n" << std::endl;

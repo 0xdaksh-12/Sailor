@@ -5,6 +5,7 @@
 
 #include "auth/auth_manager.hpp"
 #include "filesystem/delete_service.hpp"
+#include "filesystem/directory_service.hpp"
 #include "filesystem/download_service.hpp"
 #include "filesystem/file_service.hpp"
 #include "filesystem/rename_service.hpp"
@@ -34,5 +35,6 @@ class TcpServer {
   sailor::fs::DownloadService download_service_;
   sailor::fs::DeleteService delete_service_;
   sailor::fs::RenameService rename_service_;
+  sailor::fs::DirectoryService directory_service_;
   std::mt19937_64 rng_;
 };

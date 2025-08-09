@@ -628,3 +628,101 @@ bool TcpClient::rename(const std::string& source,
   std::cerr << out_message << std::endl;
   return false;
 }
+
+bool TcpClient::mkdir(const std::string& path, std::string& out_message) {
+  if (!transport_ || state_ != ConnectionState::AUTHENTICATED) {
+    out_message = "Cannot create directory: not authenticated";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  if (path.empty()) {
+    out_message = "Directory path cannot be empty";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  Packet req = PacketBuilder::mkdirRequest(path);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    out_message = "Failed to send MKDIR_REQUEST";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  Packet resp;
+  if (!PacketIO::receivePacket(*transport_, resp)) {
+    out_message = "Failed to receive MKDIR_RESPONSE";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(resp.header.type) ==
+      PacketType::MKDIR_RESPONSE) {
+    bool success = false;
+    if (!PacketBuilder::parseMkdirResponse(resp, success, out_message)) {
+      out_message = "Malformed MKDIR_RESPONSE packet";
+      std::cerr << out_message << std::endl;
+      return false;
+    }
+    return success;
+  } else if (static_cast<PacketType>(resp.header.type) == PacketType::ERROR) {
+    PacketBuilder::parseError(resp, out_message);
+    return false;
+  }
+
+  out_message =
+      "Unexpected packet response: " + std::to_string(resp.header.type);
+  std::cerr << out_message << std::endl;
+  return false;
+}
+
+bool TcpClient::rmdir(const std::string& path, std::string& out_message) {
+  if (!transport_ || state_ != ConnectionState::AUTHENTICATED) {
+    out_message = "Cannot remove directory: not authenticated";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  if (path.empty()) {
+    out_message = "Directory path cannot be empty";
+    std::cerr << out_message << std::endl;
+    return false;
+  }
+
+  Packet req = PacketBuilder::rmdirRequest(path);
+  if (!PacketIO::sendPacket(*transport_, req)) {
+    out_message = "Failed to send RMDIR_REQUEST";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  Packet resp;
+  if (!PacketIO::receivePacket(*transport_, resp)) {
+    out_message = "Failed to receive RMDIR_RESPONSE";
+    std::cerr << out_message << std::endl;
+    disconnect();
+    return false;
+  }
+
+  if (static_cast<PacketType>(resp.header.type) ==
+      PacketType::RMDIR_RESPONSE) {
+    bool success = false;
+    if (!PacketBuilder::parseRmdirResponse(resp, success, out_message)) {
+      out_message = "Malformed RMDIR_RESPONSE packet";
+      std::cerr << out_message << std::endl;
+      return false;
+    }
+    return success;
+  } else if (static_cast<PacketType>(resp.header.type) == PacketType::ERROR) {
+    PacketBuilder::parseError(resp, out_message);
+    return false;
+  }
+
+  out_message =
+      "Unexpected packet response: " + std::to_string(resp.header.type);
+  std::cerr << out_message << std::endl;
+  return false;
+}

@@ -32,6 +32,8 @@ class TcpClient {
   bool deleteFile(const std::string& remote_path, std::string& out_message);
   bool rename(const std::string& source, const std::string& destination,
               std::string& out_message);
+  bool mkdir(const std::string& path, std::string& out_message);
+  bool rmdir(const std::string& path, std::string& out_message);
   void disconnect();
 
   bool isAuthenticated() const {

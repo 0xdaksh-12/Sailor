@@ -26,6 +26,7 @@ TcpServer::TcpServer(int port, std::string cert_path, std::string key_path,
       download_service_(file_service_),
       delete_service_(file_service_),
       rename_service_(file_service_),
+      directory_service_(file_service_),
       rng_(std::random_device{}()) {}
 
 TcpServer::~TcpServer() {
@@ -367,6 +368,68 @@ void TcpServer::handleClient(int client_fd) {
                   << "\n  Detail: " << result_msg << std::endl;
 
         Packet resp = PacketBuilder::renameResponse(ok, result_msg);
+        PacketIO::sendPacket(transport, resp);
+        break;
+      }
+
+      case PacketType::MKDIR_REQUEST: {
+        if (!session.authenticated) {
+          std::cerr << "[AUTH GUARD] Unauthorized MKDIR attempt" << std::endl;
+          Packet err =
+              PacketBuilder::mkdirResponse(false, "Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string path;
+        if (!PacketBuilder::parseMkdirRequest(packet, path)) {
+          Packet err = PacketBuilder::mkdirResponse(
+              false, "Malformed MKDIR_REQUEST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string result_msg;
+        bool ok = directory_service_.createDirectory(path, session.username,
+                                                     result_msg);
+
+        std::cout << "[MKDIR]\n  User: " << session.username
+                  << "\n  Path: " << path
+                  << "\n  Status: " << (ok ? "SUCCESS" : "FAILED")
+                  << "\n  Detail: " << result_msg << std::endl;
+
+        Packet resp = PacketBuilder::mkdirResponse(ok, result_msg);
+        PacketIO::sendPacket(transport, resp);
+        break;
+      }
+
+      case PacketType::RMDIR_REQUEST: {
+        if (!session.authenticated) {
+          std::cerr << "[AUTH GUARD] Unauthorized RMDIR attempt" << std::endl;
+          Packet err =
+              PacketBuilder::rmdirResponse(false, "Authentication required");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string path;
+        if (!PacketBuilder::parseRmdirRequest(packet, path)) {
+          Packet err = PacketBuilder::rmdirResponse(
+              false, "Malformed RMDIR_REQUEST packet");
+          PacketIO::sendPacket(transport, err);
+          break;
+        }
+
+        std::string result_msg;
+        bool ok = directory_service_.removeDirectory(path, session.username,
+                                                     result_msg);
+
+        std::cout << "[RMDIR]\n  User: " << session.username
+                  << "\n  Path: " << path
+                  << "\n  Status: " << (ok ? "SUCCESS" : "FAILED")
+                  << "\n  Detail: " << result_msg << std::endl;
+
+        Packet resp = PacketBuilder::rmdirResponse(ok, result_msg);
         PacketIO::sendPacket(transport, resp);
         break;
       }

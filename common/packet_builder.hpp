@@ -416,6 +416,38 @@ class PacketBuilder {
     return packet;
   }
 
+  // MKDIR_REQUEST:
+  // [uint16_t path_len][path bytes]
+  static Packet mkdirRequest(const std::string& path) {
+    Packet packet = deleteRequest(path);
+    packet.header.type = static_cast<uint32_t>(PacketType::MKDIR_REQUEST);
+    return packet;
+  }
+
+  // MKDIR_RESPONSE:
+  // [uint8_t success (1 or 0)][uint16_t msg_len][msg bytes]
+  static Packet mkdirResponse(bool success, const std::string& message) {
+    Packet packet = deleteResponse(success, message);
+    packet.header.type = static_cast<uint32_t>(PacketType::MKDIR_RESPONSE);
+    return packet;
+  }
+
+  // RMDIR_REQUEST:
+  // [uint16_t path_len][path bytes]
+  static Packet rmdirRequest(const std::string& path) {
+    Packet packet = deleteRequest(path);
+    packet.header.type = static_cast<uint32_t>(PacketType::RMDIR_REQUEST);
+    return packet;
+  }
+
+  // RMDIR_RESPONSE:
+  // [uint8_t success (1 or 0)][uint16_t msg_len][msg bytes]
+  static Packet rmdirResponse(bool success, const std::string& message) {
+    Packet packet = deleteResponse(success, message);
+    packet.header.type = static_cast<uint32_t>(PacketType::RMDIR_RESPONSE);
+    return packet;
+  }
+
   // Parsers
   static bool parseAuthRequest(const Packet& packet, std::string& out_user,
                                std::string& out_pass) {
@@ -700,11 +732,30 @@ class PacketBuilder {
     if (packet.payload.size() < offset + d_len) return false;
     out_dest.assign(
         reinterpret_cast<const char*>(packet.payload.data() + offset), d_len);
+
     return true;
   }
 
   static bool parseRenameResponse(const Packet& packet, bool& out_success,
                                   std::string& out_message) {
+    return parseDeleteResponse(packet, out_success, out_message);
+  }
+
+  static bool parseMkdirRequest(const Packet& packet, std::string& out_path) {
+    return parseListRequest(packet, out_path);
+  }
+
+  static bool parseMkdirResponse(const Packet& packet, bool& out_success,
+                                 std::string& out_message) {
+    return parseDeleteResponse(packet, out_success, out_message);
+  }
+
+  static bool parseRmdirRequest(const Packet& packet, std::string& out_path) {
+    return parseListRequest(packet, out_path);
+  }
+
+  static bool parseRmdirResponse(const Packet& packet, bool& out_success,
+                                 std::string& out_message) {
     return parseDeleteResponse(packet, out_success, out_message);
   }
 };
