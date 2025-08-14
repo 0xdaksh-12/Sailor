@@ -10,13 +10,18 @@ build:
 clean:
     rm -rf build
 
-# Generate development TLS certificates
+# Generate development TLS certificates (Server & Client mTLS)
 certs:
     mkdir -p certs
     openssl req -new -x509 -nodes -days 365 \
       -subj "/C=US/ST=Dev/L=Dev/O=Sailor/CN=127.0.0.1" \
       -keyout certs/key.pem \
       -out certs/cert.pem
+    openssl genrsa -out certs/client-key.pem 2048
+    openssl req -new -x509 -nodes -days 365 \
+      -subj "/C=US/ST=Dev/L=Dev/O=Sailor/CN=sailor-client" \
+      -key certs/client-key.pem \
+      -out certs/client-cert.pem
 
 # Initialize SQLite database from init.sql
 init-db:
