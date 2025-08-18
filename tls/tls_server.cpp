@@ -31,8 +31,11 @@ static std::string resolveFilePath(const std::string& path) {
   return path;
 }
 
-TlsServerContext::TlsServerContext(std::string cert_path, std::string key_path)
-    : cert_path_(std::move(cert_path)), key_path_(std::move(key_path)) {}
+TlsServerContext::TlsServerContext(std::string cert_path, std::string key_path,
+                                   std::string client_ca_path)
+    : cert_path_(std::move(cert_path)),
+      key_path_(std::move(key_path)),
+      client_ca_path_(std::move(client_ca_path)) {}
 
 TlsServerContext::~TlsServerContext() {
   if (ctx_) {
@@ -69,6 +72,20 @@ bool TlsServerContext::initialize() {
 
   if (!SSL_CTX_check_private_key(ctx_)) {
     std::cerr << "Private key does not match public certificate" << std::endl;
+    return false;
+  }
+
+  // Enable Mutual TLS: Require client to present a valid certificate
+  SSL_CTX_set_verify(ctx_, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+                     nullptr);
+
+  // Load trusted CA to verify the client's certificate
+  std::string trusted_client_ca = resolveFilePath(client_ca_path_);
+  if (SSL_CTX_load_verify_locations(ctx_, trusted_client_ca.c_str(), nullptr) <=
+      0) {
+    std::cerr << "Failed to configure client CA verification path: "
+              << trusted_client_ca << std::endl;
+    ERR_print_errors_fp(stderr);
     return false;
   }
 

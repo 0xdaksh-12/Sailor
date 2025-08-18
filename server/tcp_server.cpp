@@ -92,6 +92,20 @@ void TcpServer::handleClient(int client_fd) {
     return;
   }
 
+  X509* client_cert = SSL_get_peer_certificate(ssl);
+  if (!client_cert) {
+    std::cerr << "mTLS: Client did not present a certificate" << std::endl;
+    SSL_free(ssl);
+    close(client_fd);
+    return;
+  }
+
+  char subject_name[256];
+  X509_NAME_oneline(X509_get_subject_name(client_cert), subject_name,
+                    sizeof(subject_name));
+  std::cout << "mTLS Verified Client Identity: " << subject_name << std::endl;
+  X509_free(client_cert);
+
   std::cout << "TLS connected (Cipher: " << SSL_get_cipher(ssl) << ")"
             << std::endl;
 
@@ -114,8 +128,7 @@ void TcpServer::handleClient(int client_fd) {
       case PacketType::AUTH_REQUEST: {
         std::string username, password;
         if (!PacketBuilder::parseAuthRequest(packet, username, password)) {
-          Packet err =
-              PacketBuilder::error("Malformed AUTH_REQUEST packet");
+          Packet err = PacketBuilder::error("Malformed AUTH_REQUEST packet");
           PacketIO::sendPacket(transport, err);
           break;
         }
@@ -188,16 +201,14 @@ void TcpServer::handleClient(int client_fd) {
         std::string r_path, filename, sha256_hash;
         if (!PacketBuilder::parseUploadBegin(packet, up_id, f_size, r_path,
                                              filename, sha256_hash)) {
-          Packet err =
-              PacketBuilder::error("Malformed UPLOAD_BEGIN packet");
+          Packet err = PacketBuilder::error("Malformed UPLOAD_BEGIN packet");
           PacketIO::sendPacket(transport, err);
           break;
         }
 
         std::cout << "[UPLOAD_BEGIN]\n  User: " << session.username
-                  << "\n  File: " << filename
-                  << "\n  Size: " << f_size << " bytes"
-                  << "\n  SHA256: " << sha256_hash << std::endl;
+                  << "\n  File: " << filename << "\n  Size: " << f_size
+                  << " bytes" << "\n  SHA256: " << sha256_hash << std::endl;
 
         std::string err;
         if (!upload_service_.beginUpload(up_id, r_path, filename, f_size,
@@ -225,8 +236,7 @@ void TcpServer::handleClient(int client_fd) {
 
         if (!PacketBuilder::parseUploadChunk(packet, up_id, offset, chunk_data,
                                              chunk_size)) {
-          Packet err =
-              PacketBuilder::error("Malformed UPLOAD_CHUNK packet");
+          Packet err = PacketBuilder::error("Malformed UPLOAD_CHUNK packet");
           PacketIO::sendPacket(transport, err);
           break;
         }
@@ -263,8 +273,7 @@ void TcpServer::handleClient(int client_fd) {
         } else {
           std::cout << "[UPLOAD]\n  User: " << session.username
                     << "\n  Status: SUCCESS (Checksum verified)" << std::endl;
-          Packet resp =
-              PacketBuilder::success("Upload verified and completed");
+          Packet resp = PacketBuilder::success("Upload verified and completed");
           PacketIO::sendPacket(transport, resp);
         }
         break;
@@ -295,8 +304,7 @@ void TcpServer::handleClient(int client_fd) {
         }
 
         std::cout << "[DOWNLOAD_BEGIN]\n  User: " << session.username
-                  << "\n  Path: " << req_path
-                  << "\n  File: " << meta.filename
+                  << "\n  Path: " << req_path << "\n  File: " << meta.filename
                   << "\n  Size: " << meta.file_size << " bytes"
                   << "\n  SHA256: " << meta.sha256_hash << std::endl;
 
@@ -358,12 +366,11 @@ void TcpServer::handleClient(int client_fd) {
         }
 
         std::string result_msg;
-        bool ok = rename_service_.renamePath(src, dst, session.username,
-                                             result_msg);
+        bool ok =
+            rename_service_.renamePath(src, dst, session.username, result_msg);
 
         std::cout << "[RENAME]\n  User: " << session.username
-                  << "\n  Source: " << src
-                  << "\n  Dest:   " << dst
+                  << "\n  Source: " << src << "\n  Dest:   " << dst
                   << "\n  Status: " << (ok ? "SUCCESS" : "FAILED")
                   << "\n  Detail: " << result_msg << std::endl;
 
@@ -448,8 +455,8 @@ void TcpServer::handleClient(int client_fd) {
       }
 
       default:
-        std::cout << "Unhandled packet type: "
-                  << static_cast<uint32_t>(p_type) << std::endl;
+        std::cout << "Unhandled packet type: " << static_cast<uint32_t>(p_type)
+                  << std::endl;
         break;
     }
   }
