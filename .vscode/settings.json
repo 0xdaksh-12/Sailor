@@ -1,5 +1,10 @@
 {
   "clang-format.style": "Google",
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "xaver.clang-format"
+  "editor.defaultFormatter": "xaver.clang-format",
+  "clangd.arguments": [
+    "--compile-commands-dir=build"
+  ],
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json"
 }
+

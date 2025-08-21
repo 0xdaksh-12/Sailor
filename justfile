@@ -3,12 +3,16 @@ default: build
 
 # Configure and compile Sailor server and client
 build:
-    cmake -B build -S .
+    cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     cmake --build build
 
 # Clean build directory
 clean:
     rm -rf build
+
+# Inspect exported C ABI symbols from shared library
+symbols: build
+    nm -D --defined-only build/libsailor.so | grep sailor_
 
 # Generate development TLS certificates (Server & Client mTLS)
 certs:
