@@ -2,8 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "tcp_client.hpp"
-#include "tls/tls_init.hpp"
+#include "sailor.h"
 
 void printProgressBar(uint64_t sent, uint64_t total) {
   if (total == 0) return;
@@ -26,25 +25,19 @@ void printProgressBar(uint64_t sent, uint64_t total) {
 }
 
 int main(int argc, char* argv[]) {
-  initializeTls();
-
   std::string host = "127.0.0.1";
   int port = 9000;
   std::string user = "admin";
   std::string pass = "password123";
 
-  // Mode: "list" (default) or "upload"
   std::string command = (argc > 1) ? argv[1] : "list";
 
-  TcpClient client;
-  if (!client.connectTo(host, port)) {
-    cleanupTls();
-    return 1;
-  }
+  sailor_set_progress_callback(printProgressBar);
 
-  if (!client.login(user, pass)) {
-    client.disconnect();
-    cleanupTls();
+  int32_t conn_res = sailor_connect(host.c_str(), port, user.c_str(), pass.c_str());
+  if (conn_res != SAILOR_OK) {
+    std::cerr << "Failed to connect and authenticate (Status code: " << conn_res
+              << ")" << std::endl;
     return 1;
   }
 
@@ -52,8 +45,7 @@ int main(int argc, char* argv[]) {
     if (argc < 3) {
       std::cerr << "Usage: " << argv[0] << " upload <local_file> [remote_dir]"
                 << std::endl;
-      client.disconnect();
-      cleanupTls();
+      sailor_disconnect();
       return 1;
     }
 
@@ -62,14 +54,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Starting upload: " << local_file << " -> " << remote_dir
               << std::endl;
-    bool ok = client.upload(local_file, remote_dir, printProgressBar);
-    std::cout << (ok ? "\nUpload complete." : "\nUpload failed.") << std::endl;
+    int32_t ok = sailor_upload(local_file.c_str(), remote_dir.c_str());
+    std::cout << (ok == SAILOR_OK ? "\nUpload complete." : "\nUpload failed.")
+              << std::endl;
   } else if (command == "download") {
     if (argc < 3) {
       std::cerr << "Usage: " << argv[0] << " download <remote_path> [local_dest]"
                 << std::endl;
-      client.disconnect();
-      cleanupTls();
+      sailor_disconnect();
       return 1;
     }
 
@@ -78,87 +70,80 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Starting download: " << remote_path << " -> " << local_dest
               << std::endl;
-    bool ok = client.download(remote_path, local_dest, printProgressBar);
-    std::cout << (ok ? "\nDownload complete." : "\nDownload failed.")
+    int32_t ok = sailor_download(remote_path.c_str(), local_dest.c_str());
+    std::cout << (ok == SAILOR_OK ? "\nDownload complete." : "\nDownload failed.")
               << std::endl;
   } else if (command == "delete") {
     if (argc < 3) {
       std::cerr << "Usage: " << argv[0] << " delete <remote_path>"
                 << std::endl;
-      client.disconnect();
-      cleanupTls();
+      sailor_disconnect();
       return 1;
     }
 
     std::string remote_path = argv[2];
-    std::string result_msg;
     std::cout << "Deleting remote path: " << remote_path << std::endl;
-    bool ok = client.deleteFile(remote_path, result_msg);
-    if (ok) {
-      std::cout << "Delete SUCCESS: " << result_msg << std::endl;
+    int32_t ok = sailor_delete(remote_path.c_str());
+    if (ok == SAILOR_OK) {
+      std::cout << "Delete SUCCESS" << std::endl;
     } else {
-      std::cerr << "Delete FAILED: " << result_msg << std::endl;
+      std::cerr << "Delete FAILED (Code: " << ok << ")" << std::endl;
     }
   } else if (command == "rename" || command == "move") {
     if (argc < 4) {
       std::cerr << "Usage: " << argv[0] << " " << command
                 << " <source_path> <dest_path>" << std::endl;
-      client.disconnect();
-      cleanupTls();
+      sailor_disconnect();
       return 1;
     }
 
     std::string src = argv[2];
     std::string dst = argv[3];
-    std::string result_msg;
     std::cout << "Renaming/Moving: " << src << " -> " << dst << std::endl;
-    bool ok = client.rename(src, dst, result_msg);
-    if (ok) {
-      std::cout << "Rename SUCCESS: " << result_msg << std::endl;
+    int32_t ok = sailor_rename(src.c_str(), dst.c_str());
+    if (ok == SAILOR_OK) {
+      std::cout << "Rename SUCCESS" << std::endl;
     } else {
-      std::cerr << "Rename FAILED: " << result_msg << std::endl;
+      std::cerr << "Rename FAILED (Code: " << ok << ")" << std::endl;
     }
   } else if (command == "mkdir") {
     if (argc < 3) {
       std::cerr << "Usage: " << argv[0] << " mkdir <path>" << std::endl;
-      client.disconnect();
-      cleanupTls();
+      sailor_disconnect();
       return 1;
     }
 
     std::string path = argv[2];
-    std::string result_msg;
     std::cout << "Creating directory: " << path << std::endl;
-    bool ok = client.mkdir(path, result_msg);
-    if (ok) {
-      std::cout << "MKDIR SUCCESS: " << result_msg << std::endl;
+    int32_t ok = sailor_mkdir(path.c_str());
+    if (ok == SAILOR_OK) {
+      std::cout << "MKDIR SUCCESS" << std::endl;
     } else {
-      std::cerr << "MKDIR FAILED: " << result_msg << std::endl;
+      std::cerr << "MKDIR FAILED (Code: " << ok << ")" << std::endl;
     }
   } else if (command == "rmdir") {
     if (argc < 3) {
       std::cerr << "Usage: " << argv[0] << " rmdir <path>" << std::endl;
-      client.disconnect();
-      cleanupTls();
+      sailor_disconnect();
       return 1;
     }
 
     std::string path = argv[2];
-    std::string result_msg;
     std::cout << "Removing directory: " << path << std::endl;
-    bool ok = client.rmdir(path, result_msg);
-    if (ok) {
-      std::cout << "RMDIR SUCCESS: " << result_msg << std::endl;
+    int32_t ok = sailor_rmdir(path.c_str());
+    if (ok == SAILOR_OK) {
+      std::cout << "RMDIR SUCCESS" << std::endl;
     } else {
-      std::cerr << "RMDIR FAILED: " << result_msg << std::endl;
+      std::cerr << "RMDIR FAILED (Code: " << ok << ")" << std::endl;
     }
   } else {
     std::string path = (argc > 2) ? argv[2] : "/";
     std::cout << "\nListing directory: " << path << "\n" << std::endl;
-    std::vector<sailor::fs::DirectoryEntry> entries;
+    SailorListResult* result = sailor_list(path.c_str());
 
-    if (client.list(path, entries)) {
-      for (const auto& item : entries) {
+    if (result) {
+      for (uint64_t i = 0; i < result->count; ++i) {
+        const auto& item = result->entries[i];
         if (item.is_directory) {
           std::cout << " [D] " << item.name << "/" << std::endl;
         } else {
@@ -166,10 +151,12 @@ int main(int argc, char* argv[]) {
                     << " (" << item.size << " bytes)" << std::endl;
         }
       }
+      sailor_free_list(result);
+    } else {
+      std::cerr << "Failed to list directory" << std::endl;
     }
   }
 
-  client.disconnect();
-  cleanupTls();
+  sailor_disconnect();
   return 0;
 }

@@ -1,13 +1,17 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Sailor)
+project(Sailor VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 
 find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 
-set(SHARED_SOURCES
+set(CORE_SOURCES
     common/socket_utils.cpp
     common/hash.cpp
     protocol/packet_serializer.cpp
@@ -27,56 +31,59 @@ set(SHARED_SOURCES
     filesystem/directory_service.cpp
 )
 
-add_executable(
-    sailor-server
+# libsailor Shared Library (Target for Flutter FFI)
+add_library(sailor SHARED
+    sdk/src/sailor_ffi.cpp
+    sdk/src/sailor_client_internal.cpp
+    ${CORE_SOURCES}
+)
+
+target_compile_definitions(sailor PRIVATE SAILOR_EXPORTS)
+
+target_include_directories(sailor
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sdk/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/sdk/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/protocol
+        ${CMAKE_CURRENT_SOURCE_DIR}/transport
+        ${CMAKE_CURRENT_SOURCE_DIR}/tls
+        ${CMAKE_CURRENT_SOURCE_DIR}/auth
+        ${CMAKE_CURRENT_SOURCE_DIR}/filesystem
+)
+
+target_link_libraries(sailor
+    PRIVATE
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        Threads::Threads
+)
+
+# Server Executable
+add_executable(sailor-server
     server/main.cpp
     server/tcp_server.cpp
-    ${SHARED_SOURCES}
+    ${CORE_SOURCES}
 )
 
-add_executable(
-    sailor-client
-    client/main.cpp
-    client/tcp_client.cpp
-    ${SHARED_SOURCES}
+target_include_directories(sailor-server PRIVATE
+    server common protocol transport tls auth filesystem .
 )
 
-target_include_directories(
-    sailor-server
-    PRIVATE
-    server
-    common
-    protocol
-    transport
-    tls
-    auth
-    filesystem
-    .
+target_link_libraries(sailor-server PRIVATE
+    OpenSSL::SSL OpenSSL::Crypto Threads::Threads
 )
 
-target_include_directories(
-    sailor-client
-    PRIVATE
-    client
-    common
-    protocol
-    transport
-    tls
-    auth
-    filesystem
-    .
+# Client CLI Executable (Uses libsailor)
+add_executable(sailor-client client/main.cpp)
+
+target_include_directories(sailor-client PRIVATE
+    client sdk/include tls
 )
 
-target_link_libraries(
-    sailor-server
-    PRIVATE
-    OpenSSL::SSL
-    OpenSSL::Crypto
-)
-
-target_link_libraries(
-    sailor-client
-    PRIVATE
-    OpenSSL::SSL
-    OpenSSL::Crypto
+target_link_libraries(sailor-client PRIVATE
+    sailor OpenSSL::SSL OpenSSL::Crypto
 )
