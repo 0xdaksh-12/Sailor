@@ -88,4 +88,15 @@ test: build
     test ! -d server_storage/test_dir && echo "Directory creation & removal verified!"; \
     rm -f test_input.bin; \
     echo "PASSED!"
+    
+# Run Flutter Desktop Application (Linux)
+flutter-run: build
+    cd flutter && LD_LIBRARY_PATH=../build flutter run -d linux
 
+# Run Flutter tests
+flutter-test:
+    cd flutter && flutter test
+
+# Build Flutter Linux Release Bundle
+flutter-build: build
+    cd flutter && flutter build linux --release
