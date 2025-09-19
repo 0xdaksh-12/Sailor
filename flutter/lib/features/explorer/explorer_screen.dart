@@ -399,10 +399,16 @@ class LocalExplorerPane extends ConsumerWidget {
           PopupMenuItem(
             value: 'upload',
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.upload, size: 18, color: Colors.blueAccent),
                 const SizedBox(width: 8),
-                Text('Upload to ${remoteState.currentPath}'),
+                Expanded(
+                  child: Text(
+                    'Upload to ${remoteState.currentPath}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -410,10 +416,13 @@ class LocalExplorerPane extends ConsumerWidget {
           const PopupMenuItem(
             value: 'open',
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.folder_open, size: 18),
                 SizedBox(width: 8),
-                Text('Open Folder'),
+                Expanded(
+                  child: Text('Open Folder', overflow: TextOverflow.ellipsis),
+                ),
               ],
             ),
           ),
@@ -674,20 +683,29 @@ class RemoteExplorerPane extends ConsumerWidget {
           PopupMenuItem(
             value: 'download_current',
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.download, size: 18, color: Colors.tealAccent),
                 const SizedBox(width: 8),
-                Text('Download to ${localState.currentPath}'),
+                Expanded(
+                  child: Text(
+                    'Download to ${localState.currentPath}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
           const PopupMenuItem(
             value: 'download_custom',
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.file_download_outlined, size: 18),
                 SizedBox(width: 8),
-                Text('Download To...'),
+                Expanded(
+                  child: Text('Download To...', overflow: TextOverflow.ellipsis),
+                ),
               ],
             ),
           ),
@@ -695,20 +713,30 @@ class RemoteExplorerPane extends ConsumerWidget {
         const PopupMenuItem(
           value: 'rename',
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.drive_file_rename_outline, size: 18),
               SizedBox(width: 8),
-              Text('Rename'),
+              Expanded(
+                child: Text('Rename', overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
         ),
         PopupMenuItem(
           value: 'delete',
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
               const SizedBox(width: 8),
-              Text(entry.isDirectory ? 'Delete Folder' : 'Delete File', style: const TextStyle(color: Colors.redAccent)),
+              Expanded(
+                child: Text(
+                  entry.isDirectory ? 'Delete Folder' : 'Delete File',
+                  style: const TextStyle(color: Colors.redAccent),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
