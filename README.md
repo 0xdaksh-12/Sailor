@@ -19,41 +19,51 @@ Sailor is a secure, high-performance file transfer protocol and application suit
 
 ### System Flow
 
-```mermaid
-graph TD
-    UI["Flutter Desktop UI"] -->|"Dart FFI (Isolate Worker)"| LIB["libsailor.so (Shared C ABI)"]
-    CLI["CLI Client (sailor-client)"] -->|"Direct C ABI Link"| LIB
-    LIB -->|"TLS 1.3 / TCP"| SRV["Sailor Server (C++17)"]
-    SRV --> DB[("SQLite (users.db)")]
-    SRV --> FS[("Server Storage Directory")]
+```text
+  Flutter Desktop UI          CLI Client
+          │                        │
+          │ (Dart FFI)             │ (C ABI Link)
+          ▼                        ▼
+  +--------------------------------------------+
+  |            libsailor.so (C ABI)            |
+  +--------------------------------------------+
+                       │
+                       │ TLS 1.3 / TCP
+                       ▼
+  +--------------------------------------------+
+  |            Sailor Server (C++17)           |
+  +--------------------------------------------+
+          │                            │
+          ▼                            ▼
+  data/users.db (SQLite)        server_storage/
 ```
 
 ### Layered Protocol Stack
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ Application / Storage Layer                                 │
-│   • File Chunking & Streaming (UploadService, Download)     │
-│   • Checksum Verification (SHA-256 integrity over file)     │
-├─────────────────────────────────────────────────────────────┤
-│ Session & Authorization Layer                               │
-│   • User Authentication (AUTH_REQUEST / AUTH_RESPONSE)      │
-│   • Credential Hashing (SHA-256 / future Argon2id)          │
-│   • State Enforcement & Session ID tracking                 │
-├─────────────────────────────────────────────────────────────┤
-│ Binary Packet Framing Layer                                 │
-│   • PacketHeader (type, payload_size) + PacketSerializer    │
-├─────────────────────────────────────────────────────────────┤
-│ TLS / Security Layer (OpenSSL)    [Handshake & Wire Crypto] │
-│   • Key Exchange (X25519 ECDHE via TLS 1.3)                 │
-│   • Authenticated Encryption (AES-GCM wire record crypto)   │
-├─────────────────────────────────────────────────────────────┤
-│ Transport Layer                                             │
-│   • ITransport (TcpTransport / TlsTransport)                │
-├─────────────────────────────────────────────────────────────┤
-│ Network / Socket Layer                                      │
-│   • OS TCP Socket (socket_fd)                               │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+| Application / Storage Layer                                 |
+|   - File Chunking & Streaming (UploadService, DownloadService)|
+|   - SHA-256 Checksum Integrity Verification                 |
++-------------------------------------------------------------+
+| Session & Authorization Layer                               |
+|   - User Authentication (AUTH_REQUEST / AUTH_RESPONSE)       |
+|   - Password Hashing (SHA-256 / Argon2id)                   |
+|   - State Machine Enforcement & Session Tracking            |
++-------------------------------------------------------------+
+| Binary Packet Framing Layer                                 |
+|   - PacketHeader (magic, type, payload_size) + Serializer   |
++-------------------------------------------------------------+
+| TLS / Security Layer (OpenSSL)    [Handshake & Wire Crypto] |
+|   - Key Exchange (X25519 ECDHE via TLS 1.3)                 |
+|   - Authenticated Encryption (AES-GCM wire record crypto)   |
++-------------------------------------------------------------+
+| Transport Layer                                             |
+|   - ITransport (TcpTransport / TlsTransport)                |
++-------------------------------------------------------------+
+| Network / Socket Layer                                      |
+|   - OS TCP Socket (socket_fd)                               |
++-------------------------------------------------------------+
 ```
 
 ---
