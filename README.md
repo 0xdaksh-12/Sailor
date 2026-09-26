@@ -41,29 +41,29 @@ Sailor is a secure, high-performance file transfer protocol and application suit
 ### Layered Protocol Stack
 
 ```text
-+-------------------------------------------------------------+
-| Application / Storage Layer                                 |
-|   - File Chunking & Streaming (UploadService, DownloadService)|
-|   - SHA-256 Checksum Integrity Verification                 |
-+-------------------------------------------------------------+
-| Session & Authorization Layer                               |
-|   - User Authentication (AUTH_REQUEST / AUTH_RESPONSE)       |
-|   - Password Hashing (SHA-256 / Argon2id)                   |
-|   - State Machine Enforcement & Session Tracking            |
-+-------------------------------------------------------------+
-| Binary Packet Framing Layer                                 |
-|   - PacketHeader (magic, type, payload_size) + Serializer   |
-+-------------------------------------------------------------+
-| TLS / Security Layer (OpenSSL)    [Handshake & Wire Crypto] |
-|   - Key Exchange (X25519 ECDHE via TLS 1.3)                 |
-|   - Authenticated Encryption (AES-GCM wire record crypto)   |
-+-------------------------------------------------------------+
-| Transport Layer                                             |
-|   - ITransport (TcpTransport / TlsTransport)                |
-+-------------------------------------------------------------+
-| Network / Socket Layer                                      |
-|   - OS TCP Socket (socket_fd)                               |
-+-------------------------------------------------------------+
++----------------------------------------------------------------+
+| Application / Storage Layer                                    |
+|   - File Chunking & Streaming (UploadService, DownloadService) |
+|   - SHA-256 Checksum Integrity Verification                    |
++----------------------------------------------------------------+
+| Session & Authorization Layer                                  |
+|   - User Authentication (AUTH_REQUEST / AUTH_RESPONSE)         |
+|   - Password Hashing (SHA-256 / Argon2id)                      |
+|   - State Machine Enforcement & Session Tracking               |
++----------------------------------------------------------------+
+| Binary Packet Framing Layer                                    |
+|   - PacketHeader (magic, type, payload_size) + Serializer      |
++----------------------------------------------------------------+
+| TLS / Security Layer (OpenSSL)    [Handshake & Wire Crypto]    |
+|   - Key Exchange (X25519 ECDHE via TLS 1.3)                    |
+|   - Authenticated Encryption (AES-GCM wire record crypto)      |
++----------------------------------------------------------------+
+| Transport Layer                                                |
+|   - ITransport (TcpTransport / TlsTransport)                   |
++----------------------------------------------------------------+
+| Network / Socket Layer                                         |
+|   - OS TCP Socket (socket_fd)                                  |
++----------------------------------------------------------------+
 ```
 
 ---
